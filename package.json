@@ -1,0 +1,21 @@
+{
+  "name": "pulsestock",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.0.4"
+  },
+  "dependencies": {
+    "@studio-freight/lenis": "^1.0.42",
+    "animejs": "^4.3.6",
+    "globe.gl": "^2.45.3",
+    "gsap": "^3.14.2",
+    "three": "^0.183.2"
+  }
+}
