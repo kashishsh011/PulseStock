@@ -4,6 +4,8 @@ import gsap from 'gsap'
 import * as animePkg from 'animejs';
 const anime = animePkg.default || animePkg;
 import Lenis from '@studio-freight/lenis'
+import { calcFusionScore } from './engine/fusionEngine.js';
+import { getTensionByName, getTensionColor, getISOByName } from './data/countryTensionData.js';
 
 // 1. Initialize Lenis for smooth scroll (even though UI is mostly fixed, good for any internal overflow)
 const lenis = new Lenis({
@@ -74,9 +76,776 @@ const countryColors = {
   'Yemen': '#ef4444', 'Saudi Arabia': '#ef4444'
 };
 let hoverD;
+let selectedRegion = 'all';
+let selectedSector = 'Banking';
+let selectedStock = null;
+let selectedCountry = null;
+let sidebarMode = 'list';
+let detailTab = 'Overall';
+let countriesGeo = [];
 let globeFeatures = [];
 let pathNodes = [];
 let capturedCenterLng = 0;
+// Landing page sidebar state (separate from geo map sidebar)
+let landingSelectedStock = null;
+let landingSidebarMode = 'list';
+let landingDetailTab = 'Overall';
+
+const sectorStocks = {
+  "Banking": [
+    { name: "HDFC Bank",  ticker: "HDFCBANK",  score: 0.16,  label: "CONFLICTED",
+      breakdown: { F: 0.43, T: -0.14, N: 0.50, G: -0.30 },
+      fundamental: { pe: 18.2, sectorPE: 20.1, roe: 16.5, npa: 1.2, revenueGrowth: 12, promoterHolding: 26.1 },
+      technical: { rsi: 68, priceVsWMA: 0.8, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 1612.00, resistance: 1698.00 },
+      news: [
+        { headline: "HDFC Bank Q3 profit rises 18% YoY beating estimates", sentiment: "POSITIVE", source: "Bloomberg", time: "2h ago" },
+        { headline: "RBI flags concern over rising retail loan defaults", sentiment: "NEGATIVE", source: "Economic Times", time: "4h ago" },
+        { headline: "FII outflows continue for third consecutive session", sentiment: "NEGATIVE", source: "Moneycontrol", time: "5h ago" },
+        { headline: "HDFC Bank to expand rural banking by 200 branches", sentiment: "POSITIVE", source: "Business Standard", time: "8h ago" },
+        { headline: "Banking sector cautious ahead of Fed policy decision", sentiment: "NEUTRAL", source: "Reuters", time: "12h ago" }
+      ]
+    },
+    { name: "SBI",        ticker: "SBIN",       score: 0.42,  label: "BULLISH",
+      breakdown: { F: 0.30, T: 0.25, N: 0.20, G: -0.10 },
+      fundamental: { pe: 9.1, sectorPE: 20.1, roe: 14.2, npa: 2.8, revenueGrowth: 8, promoterHolding: 57.5 },
+      technical: { rsi: 55, priceVsWMA: 1.2, macd: "Bullish crossover", volumeTrend: "Increasing", support: 740.00, resistance: 812.00 },
+      news: [
+        { headline: "SBI reports strong Q3 with NPA improvement", sentiment: "POSITIVE", source: "Bloomberg", time: "3h ago" },
+        { headline: "SBI rural lending grows 22% YoY", sentiment: "POSITIVE", source: "Economic Times", time: "6h ago" },
+        { headline: "PSU banks face margin pressure from rate cuts", sentiment: "NEGATIVE", source: "Moneycontrol", time: "8h ago" },
+        { headline: "SBI to raise capital via QIP next quarter", sentiment: "NEUTRAL", source: "Business Standard", time: "10h ago" },
+        { headline: "Government may increase SBI stake says report", sentiment: "POSITIVE", source: "Reuters", time: "14h ago" }
+      ]
+    },
+    { name: "ICICI Bank", ticker: "ICICIBANK",  score: -0.21, label: "BEARISH",
+      breakdown: { F: -0.10, T: -0.30, N: -0.20, G: -0.30 },
+      fundamental: { pe: 17.4, sectorPE: 20.1, roe: 15.1, npa: 1.8, revenueGrowth: 6, promoterHolding: 0 },
+      technical: { rsi: 72, priceVsWMA: -0.5, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 1050.00, resistance: 1142.00 },
+      news: [
+        { headline: "ICICI Bank faces RBI scrutiny over loan practices", sentiment: "NEGATIVE", source: "Bloomberg", time: "1h ago" },
+        { headline: "ICICI retail loan book shows stress signals", sentiment: "NEGATIVE", source: "Economic Times", time: "5h ago" },
+        { headline: "ICICI Bank Q3 results in line with estimates", sentiment: "NEUTRAL", source: "Moneycontrol", time: "7h ago" },
+        { headline: "ICICI digital banking users cross 10 million", sentiment: "POSITIVE", source: "Business Standard", time: "9h ago" },
+        { headline: "FII selling concentrated in ICICI and HDFC", sentiment: "NEGATIVE", source: "Reuters", time: "11h ago" }
+      ]
+    },
+    { name: "Axis Bank",  ticker: "AXISBANK",   score: 0.05,  label: "NEUTRAL",
+      breakdown: { F: 0.10, T: 0.05, N: 0.00, G: -0.10 },
+      fundamental: { pe: 14.2, sectorPE: 20.1, roe: 13.8, npa: 1.5, revenueGrowth: 9, promoterHolding: 8.2 },
+      technical: { rsi: 51, priceVsWMA: 0.2, macd: "Neutral", volumeTrend: "Stable", support: 1020.00, resistance: 1105.00 },
+      news: [
+        { headline: "Axis Bank steady growth amid market volatility", sentiment: "NEUTRAL", source: "Bloomberg", time: "4h ago" },
+        { headline: "Axis Bank SME lending grows 18% YoY", sentiment: "POSITIVE", source: "Economic Times", time: "6h ago" },
+        { headline: "Axis Bank management guidance cautious for Q4", sentiment: "NEGATIVE", source: "Moneycontrol", time: "9h ago" },
+        { headline: "Axis Bank launches new UPI product", sentiment: "POSITIVE", source: "Business Standard", time: "12h ago" },
+        { headline: "Banking index flat as global cues mixed", sentiment: "NEUTRAL", source: "Reuters", time: "15h ago" }
+      ]
+    },
+    { name: "Kotak Bank", ticker: "KOTAKBANK",  score: 0.31,  label: "LEANING BULLISH",
+      breakdown: { F: 0.40, T: 0.20, N: 0.30, G: -0.20 },
+      fundamental: { pe: 20.1, sectorPE: 20.1, roe: 17.2, npa: 0.8, revenueGrowth: 15, promoterHolding: 25.9 },
+      technical: { rsi: 62, priceVsWMA: 1.8, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1740.00, resistance: 1890.00 },
+      news: [
+        { headline: "Kotak Bank best in class NPA at 0.8%", sentiment: "POSITIVE", source: "Bloomberg", time: "2h ago" },
+        { headline: "Kotak expands wealth management division", sentiment: "POSITIVE", source: "Economic Times", time: "5h ago" },
+        { headline: "Kotak valuations stretched say analysts", sentiment: "NEGATIVE", source: "Moneycontrol", time: "7h ago" },
+        { headline: "Kotak 811 digital accounts cross 5 million", sentiment: "POSITIVE", source: "Business Standard", time: "10h ago" },
+        { headline: "Private banks outperform PSU in Q3 season", sentiment: "POSITIVE", source: "Reuters", time: "13h ago" }
+      ]
+    }
+  ],
+  "IT": [
+    { name: "TCS",        ticker: "TCS",       score: 0.38,  label: "BULLISH",
+      breakdown: { F: 0.50, T: 0.30, N: 0.25, G: -0.10 },
+      fundamental: { pe: 28.4, sectorPE: 30.2, roe: 44.1, npa: 0, revenueGrowth: 11, promoterHolding: 72.3 },
+      technical: { rsi: 58, priceVsWMA: 1.5, macd: "Bullish crossover", volumeTrend: "Increasing", support: 3680.00, resistance: 3950.00 },
+      news: [
+        { headline: "TCS wins $500M deal from European bank, largest in 3 years", sentiment: "POSITIVE", source: "Bloomberg", time: "1h ago" },
+        { headline: "TCS Q3 revenue beat expectations at 11% YoY growth", sentiment: "POSITIVE", source: "Economic Times", time: "3h ago" },
+        { headline: "Rupee depreciation may hurt IT margins in Q4", sentiment: "NEGATIVE", source: "Moneycontrol", time: "6h ago" },
+        { headline: "US visa curbs pose headwind for Indian IT hiring", sentiment: "NEGATIVE", source: "Business Standard", time: "9h ago" },
+        { headline: "AI-related deals driving demand for IT services globally", sentiment: "POSITIVE", source: "Reuters", time: "12h ago" }
+      ]
+    },
+    { name: "Infosys",    ticker: "INFY",      score: 0.22,  label: "LEANING BULLISH",
+      breakdown: { F: 0.35, T: 0.15, N: 0.20, G: -0.10 },
+      fundamental: { pe: 24.8, sectorPE: 30.2, roe: 31.7, npa: 0, revenueGrowth: 9, promoterHolding: 14.9 },
+      technical: { rsi: 55, priceVsWMA: 0.9, macd: "Bullish crossover", volumeTrend: "Stable", support: 1520.00, resistance: 1680.00 },
+      news: [
+        { headline: "Infosys raises FY24 revenue guidance to 11-11.5%", sentiment: "POSITIVE", source: "Bloomberg", time: "2h ago" },
+        { headline: "Infosys lands AI transformation deal with Fortune 500 firm", sentiment: "POSITIVE", source: "Economic Times", time: "5h ago" },
+        { headline: "Infosys faces attrition concerns in mid-level management", sentiment: "NEGATIVE", source: "Moneycontrol", time: "7h ago" },
+        { headline: "Infosys digital revenue now 60% of total business", sentiment: "POSITIVE", source: "Business Standard", time: "10h ago" },
+        { headline: "Global IT spending slowdown risk from macro uncertainty", sentiment: "NEUTRAL", source: "Reuters", time: "14h ago" }
+      ]
+    },
+    { name: "Wipro",      ticker: "WIPRO",     score: -0.08, label: "NEUTRAL",
+      breakdown: { F: 0.05, T: -0.10, N: -0.15, G: -0.10 },
+      fundamental: { pe: 22.1, sectorPE: 30.2, roe: 15.2, npa: 0, revenueGrowth: 4, promoterHolding: 72.9 },
+      technical: { rsi: 48, priceVsWMA: -0.3, macd: "Neutral", volumeTrend: "Decreasing", support: 445.00, resistance: 510.00 },
+      news: [
+        { headline: "Wipro Q3 revenue flat, below street estimates", sentiment: "NEGATIVE", source: "Bloomberg", time: "3h ago" },
+        { headline: "Wipro CEO outlines 5-year AI strategy at analyst day", sentiment: "POSITIVE", source: "Economic Times", time: "6h ago" },
+        { headline: "Wipro loses two senior executives to rival firms", sentiment: "NEGATIVE", source: "Moneycontrol", time: "8h ago" },
+        { headline: "Wipro Energy sector deals grow 18% YoY", sentiment: "POSITIVE", source: "Business Standard", time: "11h ago" },
+        { headline: "IT sector outlook cautious as BFSI clients cut budgets", sentiment: "NEUTRAL", source: "Reuters", time: "15h ago" }
+      ]
+    },
+    { name: "HCL Tech",   ticker: "HCLTECH",   score: 0.45,  label: "BULLISH",
+      breakdown: { F: 0.55, T: 0.40, N: 0.30, G: -0.10 },
+      fundamental: { pe: 26.3, sectorPE: 30.2, roe: 22.8, npa: 0, revenueGrowth: 14, promoterHolding: 60.8 },
+      technical: { rsi: 63, priceVsWMA: 2.1, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1580.00, resistance: 1750.00 },
+      news: [
+        { headline: "HCL Tech best performing IT stock YTD with 22% gain", sentiment: "POSITIVE", source: "Bloomberg", time: "1h ago" },
+        { headline: "HCL Tech wins cloud transformation deal from US pharma major", sentiment: "POSITIVE", source: "Economic Times", time: "4h ago" },
+        { headline: "HCL Tech products division growth slows to 8%", sentiment: "NEUTRAL", source: "Moneycontrol", time: "7h ago" },
+        { headline: "HCL Tech expands Europe presence with UK acquisition", sentiment: "POSITIVE", source: "Business Standard", time: "9h ago" },
+        { headline: "Analysts upgrade HCL Tech on strong deal pipeline", sentiment: "POSITIVE", source: "Reuters", time: "13h ago" }
+      ]
+    },
+    { name: "Tech M",     ticker: "TECHM",     score: -0.18, label: "BEARISH",
+      breakdown: { F: -0.15, T: -0.20, N: -0.15, G: -0.10 },
+      fundamental: { pe: 38.9, sectorPE: 30.2, roe: 8.4, npa: 0, revenueGrowth: 2, promoterHolding: 35.1 },
+      technical: { rsi: 71, priceVsWMA: -1.2, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 1190.00, resistance: 1340.00 },
+      news: [
+        { headline: "Tech Mahindra restructuring costs weigh on Q3 margins", sentiment: "NEGATIVE", source: "Bloomberg", time: "2h ago" },
+        { headline: "Tech M CEO flags slow recovery in telecom vertical", sentiment: "NEGATIVE", source: "Economic Times", time: "5h ago" },
+        { headline: "Tech M bags $120M deal from Scandinavian telecom firm", sentiment: "POSITIVE", source: "Moneycontrol", time: "8h ago" },
+        { headline: "Tech M valuation premium hard to justify say analysts", sentiment: "NEGATIVE", source: "Business Standard", time: "10h ago" },
+        { headline: "Telecom IT spending globally under pressure in 2024", sentiment: "NEGATIVE", source: "Reuters", time: "13h ago" }
+      ]
+    }
+  ],
+  "Pharma": [
+    { name: "Sun Pharma",  ticker: "SUNPHARMA", score: 0.52,  label: "BULLISH",
+      breakdown: { F: 0.60, T: 0.45, N: 0.40, G: 0.10 },
+      fundamental: { pe: 34.2, sectorPE: 32.0, roe: 18.4, npa: 0, revenueGrowth: 16, promoterHolding: 54.5 },
+      technical: { rsi: 61, priceVsWMA: 2.8, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1420.00, resistance: 1610.00 },
+      news: [
+        { headline: "Sun Pharma US specialty business grows 28% YoY", sentiment: "POSITIVE", source: "Bloomberg", time: "1h ago" },
+        { headline: "Sun Pharma receives USFDA approval for generic cancer drug", sentiment: "POSITIVE", source: "Economic Times", time: "4h ago" },
+        { headline: "Sun Pharma capex guidance raised to ₹2,200 Cr for FY25", sentiment: "NEUTRAL", source: "Moneycontrol", time: "6h ago" },
+        { headline: "US generic price erosion slowing says Sun Pharma management", sentiment: "POSITIVE", source: "Business Standard", time: "9h ago" },
+        { headline: "Pharma sector benefits from easing raw material costs", sentiment: "POSITIVE", source: "Reuters", time: "12h ago" }
+      ]
+    },
+    { name: "Dr. Reddy's", ticker: "DRREDDY",   score: 0.28,  label: "LEANING BULLISH",
+      breakdown: { F: 0.40, T: 0.20, N: 0.25, G: 0.05 },
+      fundamental: { pe: 19.8, sectorPE: 32.0, roe: 21.3, npa: 0, revenueGrowth: 13, promoterHolding: 26.6 },
+      technical: { rsi: 57, priceVsWMA: 1.1, macd: "Bullish crossover", volumeTrend: "Stable", support: 5620.00, resistance: 6200.00 },
+      news: [
+        { headline: "Dr Reddy's completes Nicotinell brand acquisition in Europe", sentiment: "POSITIVE", source: "Bloomberg", time: "2h ago" },
+        { headline: "Dr Reddy's biosimilar pipeline gets analyst upgrades", sentiment: "POSITIVE", source: "Economic Times", time: "5h ago" },
+        { headline: "USFDA issues warning letter to Dr Reddy's Hyderabad plant", sentiment: "NEGATIVE", source: "Moneycontrol", time: "7h ago" },
+        { headline: "Dr Reddy's Russia business headwinds from sanctions", sentiment: "NEGATIVE", source: "Business Standard", time: "10h ago" },
+        { headline: "Generic drug pricing stable in US market in Q4", sentiment: "NEUTRAL", source: "Reuters", time: "14h ago" }
+      ]
+    },
+    { name: "Cipla",       ticker: "CIPLA",     score: 0.14,  label: "NEUTRAL",
+      breakdown: { F: 0.20, T: 0.10, N: 0.10, G: 0.00 },
+      fundamental: { pe: 26.5, sectorPE: 32.0, roe: 14.8, npa: 0, revenueGrowth: 8, promoterHolding: 33.5 },
+      technical: { rsi: 53, priceVsWMA: 0.4, macd: "Neutral", volumeTrend: "Stable", support: 1230.00, resistance: 1390.00 },
+      news: [
+        { headline: "Cipla India business grows steadily on chronic care demand", sentiment: "POSITIVE", source: "Bloomberg", time: "3h ago" },
+        { headline: "Cipla gets tentative USFDA approval for generic Revlimid", sentiment: "POSITIVE", source: "Economic Times", time: "6h ago" },
+        { headline: "Cipla South Africa unit faces pricing pressure", sentiment: "NEGATIVE", source: "Moneycontrol", time: "8h ago" },
+        { headline: "Cipla maintains FY25 guidance at 8-10% revenue growth", sentiment: "NEUTRAL", source: "Business Standard", time: "11h ago" },
+        { headline: "India pharma exports stable despite logistics challenges", sentiment: "NEUTRAL", source: "Reuters", time: "15h ago" }
+      ]
+    },
+    { name: "Divis Lab",   ticker: "DIVISLAB",  score: -0.12, label: "BEARISH",
+      breakdown: { F: -0.05, T: -0.20, N: -0.10, G: -0.10 },
+      fundamental: { pe: 58.1, sectorPE: 32.0, roe: 16.2, npa: 0, revenueGrowth: -4, promoterHolding: 51.9 },
+      technical: { rsi: 68, priceVsWMA: -0.8, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 3450.00, resistance: 3900.00 },
+      news: [
+        { headline: "Divis Lab revenue declines for second consecutive quarter", sentiment: "NEGATIVE", source: "Bloomberg", time: "2h ago" },
+        { headline: "API price pressure from Chinese competition hurts Divis margins", sentiment: "NEGATIVE", source: "Economic Times", time: "5h ago" },
+        { headline: "Divis Lab Kakinada facility expansion on track", sentiment: "POSITIVE", source: "Moneycontrol", time: "8h ago" },
+        { headline: "Divis trades at premium to pharma peers despite earnings miss", sentiment: "NEGATIVE", source: "Business Standard", time: "11h ago" },
+        { headline: "China API supply normalizing, reduces India's pricing power", sentiment: "NEGATIVE", source: "Reuters", time: "14h ago" }
+      ]
+    },
+    { name: "Lupin",       ticker: "LUPIN",     score: 0.33,  label: "LEANING BULLISH",
+      breakdown: { F: 0.40, T: 0.30, N: 0.25, G: 0.00 },
+      fundamental: { pe: 29.7, sectorPE: 32.0, roe: 12.1, npa: 0, revenueGrowth: 18, promoterHolding: 46.9 },
+      technical: { rsi: 59, priceVsWMA: 1.7, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1680.00, resistance: 1890.00 },
+      news: [
+        { headline: "Lupin US revenue soars 32% on new product launches", sentiment: "POSITIVE", source: "Bloomberg", time: "1h ago" },
+        { headline: "Lupin gets USFDA nod for gNuvaring, high-value product", sentiment: "POSITIVE", source: "Economic Times", time: "4h ago" },
+        { headline: "Lupin Europe business faces generic competition headwinds", sentiment: "NEGATIVE", source: "Moneycontrol", time: "7h ago" },
+        { headline: "Lupin complex generics pipeline one of best in sector", sentiment: "POSITIVE", source: "Business Standard", time: "10h ago" },
+        { headline: "Pharma index outperforms broader market in March rally", sentiment: "POSITIVE", source: "Reuters", time: "13h ago" }
+      ]
+    }
+  ]
+};
+
+const sectorCountryMap = {
+  "Banking": ["USA", "RUS", "CHN", "ARE", "GBR"],
+  "IT": ["USA", "GBR", "DEU", "AUS", "CAN"],
+  "Pharma": ["USA", "DEU", "CHN", "GBR", "BRA"],
+  "Energy": ["RUS", "SAU", "IRN", "ARE", "USA"],
+  "Auto": ["JPN", "DEU", "CHN", "KOR", "USA"],
+  "FMCG": ["IDN", "BRA", "CHN", "UKR", "TUR"]
+};
+
+const regionCoordinates = {
+  all: { lat: 20, lng: 0 },
+  me:  { lat: 25, lng: 45 },
+  eu:  { lat: 50, lng: 10 },
+  ap:  { lat: 20, lng: 100 },
+  us:  { lat: 20, lng: -80 },
+  af:  { lat: 0,  lng: 20 }
+};
+
+function getCountryISO(feature) {
+  // Try direct properties first
+  const directISO = feature?.properties?.iso_a3 || feature?.properties?.ISO_A3;
+  if (directISO && directISO !== '-99') return directISO;
+  // Fall back to name-based lookup
+  const name = getCountryName(feature);
+  if (!name) return null;
+  return getISOByName(name) || getTensionByName(name)?.id || null;
+}
+
+function getBadgeStyles(label) {
+  const normalized = (label || '').toUpperCase();
+  if (normalized === 'BULLISH') return { background: '#0f766e', color: '#a7f3d0' };
+  if (normalized === 'BEARISH') return { background: '#7f1d1d', color: '#fecaca' };
+  if (normalized === 'CONFLICTED') return { background: '#78350f', color: '#fcd34d' };
+  if (normalized === 'NEUTRAL') return { background: '#334155', color: '#cbd5e1' };
+  if (normalized === 'LEANING BULLISH') return { background: '#166534', color: '#bbf7d0' };
+  return { background: '#1f2937', color: '#e2e8f0' };
+}
+
+function getScoreColor(score) {
+  return score >= 0 ? '#4ade80' : '#f87171';
+}
+
+function updateRegionButtons() {
+  document.querySelectorAll('.region-btn').forEach(btn => {
+    const active = btn.dataset.region === selectedRegion;
+    btn.classList.toggle('active', active);
+    btn.style.border = active ? '1px solid #4ade80' : '1px solid transparent';
+  });
+}
+
+function updateSectorStyles() {
+  document.querySelectorAll('.sector-list li').forEach(li => {
+    const sector = li.dataset.sector || li.textContent.trim().split(' ')[0];
+    const active = sector === selectedSector;
+    li.style.borderLeft = active ? '4px solid #4ade80' : '4px solid transparent';
+    li.style.background = active ? 'rgba(255,255,255,0.06)' : 'transparent';
+  });
+}
+
+function showGeoView() {
+  const currentActive = document.querySelector('.top-nav .tab.active');
+  if (currentActive) currentActive.classList.remove('active');
+  const geoTab = document.querySelector('.top-nav .tab[data-target="geo"]');
+  if (geoTab) {
+    geoTab.classList.add('active');
+    lenis.scrollTo('#geo-view', { duration: 1.5 });
+  }
+}
+
+function setSelectedRegion(region) {
+  selectedRegion = region;
+  updateRegionButtons();
+  const coords = regionCoordinates[region] || regionCoordinates.all;
+  if (world && world.controls) {
+    world.pointOfView({ lat: coords.lat, lng: coords.lng, altitude: 2 }, 1000);
+  }
+  const filtered = region === 'all'
+    ? geoEvents
+    : geoEvents.filter(e => e.region === region);
+  world.pointsData(filtered);
+}
+
+function setSelectedSector(sector) {
+  selectedSector = sector;
+  selectedStock = null;
+  landingSidebarMode = 'list';
+  landingDetailTab = 'Overall';
+  sidebarMode = 'list';
+  detailTab = 'Overall';
+  updateSectorStyles();
+  renderGeoRightPanel();
+  renderLandingRightPanel();
+  // Update globe polygon colors to highlight sector-relevant countries
+  if (world && countriesGeo.length) world.polygonCapColor(world.polygonCapColor());
+}
+
+function setSelectedStock(stock) {
+  selectedStock = stock;
+  sidebarMode = 'detail';
+  detailTab = 'Overall';
+  renderGeoRightPanel();
+}
+
+function setLandingStock(stock) {
+  landingSelectedStock = stock;
+  landingSidebarMode = 'detail';
+  landingDetailTab = 'Overall';
+  renderLandingRightPanel();
+}
+
+function setSelectedCountry(country) {
+  selectedCountry = country;
+  renderGeoRightPanel();
+  if (world) world.polygonCapColor(world.polygonCapColor());
+}
+
+function buildCountryCard() {
+  if (!selectedCountry) return '';
+  const tensionColor = getTensionColor(selectedCountry.score);
+  return `
+    <div style="margin-bottom:18px;padding:16px;background:#0f0f1a;border:1px solid #222;border-radius:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div>
+          <div style="font-size:1rem;color:#fff;font-weight:700;">${selectedCountry.name}</div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px;">${selectedCountry.region}</div>
+        </div>
+        <div style="padding:5px 10px;border-radius:999px;border:1px solid ${tensionColor};background:${tensionColor}22;color:${tensionColor};font-size:11px;">Tension ${selectedCountry.score}/100</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">${selectedCountry.commodities.map(c => `<span style="padding:6px 10px;background:#111827;border:1px solid #222;border-radius:999px;color:#f8fafc;font-size:11px;">${c}</span>`).join('')}</div>
+    </div>
+  `;
+}
+
+function buildStockRow(stock) {
+  const badge = getBadgeStyles(stock.label);
+  return `
+    <div data-action="select-stock" data-ticker="${stock.ticker}" style="padding:12px 0;border-bottom:1px solid #1e1e2e;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:background 0.2s;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${stock.name}</div>
+      </div>
+      <div style="font-size:12px;font-family:monospace;color:${getScoreColor(stock.score)};min-width:60px;text-align:right;">${stock.score >= 0 ? '+' : ''}${stock.score.toFixed(2)}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="padding:2px 8px;border-radius:999px;background:${badge.background};color:${badge.color};font-size:11px;font-weight:600;white-space:nowrap;">${stock.label}</div>
+        <span style="color:#94a3b8;font-size:14px;">›</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderDetailTabContent() {
+  const container = document.getElementById('detail-tab-content');
+  if (!container || !selectedStock) return;
+  if (detailTab === 'Overall') {
+    container.innerHTML = '';
+    return;
+  }
+  if (detailTab === 'Fundamental') {
+    const f = selectedStock.fundamental;
+    const colorFor = (value, type) => {
+      if (type === 'roe') return value >= 15 ? '#4ade80' : value >= 10 ? '#f59e0b' : '#f87171';
+      if (type === 'npa') return value <= 1.5 ? '#4ade80' : value <= 3 ? '#f59e0b' : '#f87171';
+      if (type === 'revenueGrowth') return value >= 0 ? '#4ade80' : '#f87171';
+      return '#ffffff';
+    };
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">P/E vs Sector</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${f.pe} vs ${f.sectorPE}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">ROE</span>
+        <span style="color:${colorFor(f.roe,'roe')};font-size:13px;font-family:monospace;">${f.roe}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">NPA</span>
+        <span style="color:${colorFor(f.npa,'npa')};font-size:13px;font-family:monospace;">${f.npa}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Revenue Growth</span>
+        <span style="color:${colorFor(f.revenueGrowth,'revenueGrowth')};font-size:13px;font-family:monospace;">${f.revenueGrowth}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Promoter Holding</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${f.promoterHolding}%</span>
+      </div>
+    `;
+    return;
+  }
+  if (detailTab === 'Technical') {
+    const t = selectedStock.technical;
+    const rsiColor = t.rsi > 70 ? '#f87171' : t.rsi < 30 ? '#4ade80' : '#94a3b8';
+    const rsiTag = t.rsi > 70 ? 'Overbought' : t.rsi < 30 ? 'Oversold' : 'Neutral';
+    const macdColor = t.macd.toLowerCase().includes('bullish') ? '#4ade80' : t.macd.toLowerCase().includes('bearish') ? '#f87171' : '#94a3b8';
+    const volumeColor = t.volumeTrend === 'Increasing' ? '#4ade80' : t.volumeTrend === 'Decreasing' ? '#f87171' : '#94a3b8';
+    const priceColor = t.priceVsWMA >= 0 ? '#4ade80' : '#f87171';
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">RSI 14</span>
+        <span style="color:${rsiColor};font-size:13px;font-family:monospace;">${t.rsi}% (${rsiTag})</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Price vs 20d WMA</span>
+        <span style="color:${priceColor};font-size:13px;font-family:monospace;">${t.priceVsWMA >= 0 ? '+' : ''}${t.priceVsWMA}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">MACD</span>
+        <span style="color:${macdColor};font-size:13px;font-family:monospace;">${t.macd}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Volume Trend</span>
+        <span style="color:${volumeColor};font-size:13px;font-family:monospace;">${t.volumeTrend}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Support</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${t.support.toFixed(2)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Resistance</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${t.resistance.toFixed(2)}</span>
+      </div>
+    `;
+    return;
+  }
+  if (detailTab === 'News AI') {
+    container.innerHTML = selectedStock.news.map(item => `
+      <div style="padding:12px 0;border-bottom:1px solid #1e1e2e;">
+        <div style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:${item.sentiment === 'POSITIVE' ? '#14532d' : item.sentiment === 'NEGATIVE' ? '#7f1d1d' : '#334155'};color:${item.sentiment === 'POSITIVE' ? '#86efac' : item.sentiment === 'NEGATIVE' ? '#fecaca' : '#cbd5e1'};font-size:11px;font-family:monospace;font-weight:600;">${item.sentiment}</div>
+        <p style="margin:10px 0 6px;color:#fff;font-size:13px;line-height:1.4;">${item.headline}</p>
+        <div style="color:#94a3b8;font-size:11px;">${item.source} · ${item.time}</div>
+      </div>
+    `).join('');
+    return;
+  }
+}
+
+function renderGeoRightPanel() {
+  const panel = document.querySelector('.geo-right-panel');
+  if (!panel) return;
+  const countryCard = buildCountryCard();
+  let html = countryCard;
+  if (sidebarMode === 'list') {
+    if (!selectedSector) {
+      html += `<div style="padding:40px 20px;text-align:center;color:#94a3b8;font-size:13px;">Select a sector to see top stocks</div>`;
+    } else {
+      const stocks = sectorStocks[selectedSector] || [];
+      html += `
+        <div style="margin-bottom:16px;">
+          <div style="font-size:11px;font-family:monospace;color:#94a3b8;text-transform:uppercase;letter-spacing:0.12em;">TOP STOCKS</div>
+          <div style="font-size:15px;color:#fff;font-family:monospace;margin-top:6px;">${selectedSector}</div>
+        </div>
+        <div>${stocks.map(buildStockRow).join('')}</div>
+      `;
+    }
+  } else if (sidebarMode === 'detail' && selectedStock) {
+    const badge = getBadgeStyles(selectedStock.label);
+    const scoreColor = getScoreColor(selectedStock.score);
+    const scoreFill = Math.min(50, Math.abs(selectedStock.score) * 50);
+    const scoreLeft = selectedStock.score >= 0 ? 50 : 50 - scoreFill;
+    const tabButtons = ['Overall','Fundamental','Technical','News AI'].map(tab => `
+      <button data-action="detail-tab" data-tab="${tab}" style="flex:1;padding:10px 0;border:none;background:none;color:${detailTab===tab ? '#fff' : '#94a3b8'};border-bottom:3px solid ${detailTab===tab ? '#4ade80' : 'transparent'};font-family:monospace;font-size:12px;cursor:pointer;">${tab}</button>
+    `).join('');
+    html += `
+      <div style="padding-bottom:12px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <button data-action="back" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">←</button>
+        <div style="flex:1;text-align:center;color:#fff;font-size:16px;font-weight:700;font-family:monospace;">${selectedStock.name}</div>
+        <div style="padding:4px 10px;border-radius:999px;background:${badge.background};color:${badge.color};font-size:11px;white-space:nowrap;">${selectedStock.label}</div>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;font-family:monospace;">
+          <span>FUSION SCORE</span>
+          <span style="color:${scoreColor};font-weight:600;">${selectedStock.score >= 0 ? '+' : ''}${selectedStock.score.toFixed(2)}</span>
+        </div>
+        <div style="position:relative;height:6px;background:#1e1e2e;border-radius:999px;margin-top:8px;">
+          <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:#333;transform:translateX(-50%);"></div>
+          <div style="position:absolute;top:0;height:100%;width:${scoreFill}%;left:${scoreLeft}%;background:${scoreColor};border-radius:999px;transition:all 0.4s ease;"></div>
+        </div>
+      </div>
+      <div style="height:1px;background:#1e1e2e;margin:18px 0;"></div>
+      <div id="signal-bars-container"></div>
+      <div style="display:flex;gap:8px;margin-top:18px;">
+        ${tabButtons}
+      </div>
+      <div id="detail-tab-content" style="margin-top:16px;"></div>
+    `;
+  } else {
+    html += `<div style="padding:24px 20px;color:#94a3b8;font-size:13px;">Select a stock to view detail information.</div>`;
+  }
+  panel.innerHTML = html;
+  if (sidebarMode === 'detail' && selectedStock) {
+    renderSignalBars({ breakdown: selectedStock.breakdown });
+    renderDetailTabContent();
+  }
+}
+
+function handleGeoRightPanelClick(event) {
+  const stockRow = event.target.closest('[data-action="select-stock"]');
+  if (stockRow) {
+    const ticker = stockRow.dataset.ticker;
+    if (selectedSector && sectorStocks[selectedSector]) {
+      const stock = sectorStocks[selectedSector].find(s => s.ticker === ticker);
+      if (stock) setSelectedStock(stock);
+    }
+    return;
+  }
+  const back = event.target.closest('[data-action="back"]');
+  if (back) {
+    selectedStock = null;
+    sidebarMode = 'list';
+    detailTab = 'Overall';
+    renderGeoRightPanel();
+    return;
+  }
+  const tabBtn = event.target.closest('[data-action="detail-tab"]');
+  if (tabBtn) {
+    detailTab = tabBtn.dataset.tab;
+    renderGeoRightPanel();
+    return;
+  }
+}
+
+function applyGeoRightPanelDelegation() {
+  const geoRightPanel = document.querySelector('.geo-right-panel');
+  if (!geoRightPanel) return;
+  geoRightPanel.addEventListener('click', handleGeoRightPanelClick);
+}
+
+function renderSelectedSectorState() {
+  updateSectorStyles();
+  renderGeoRightPanel();
+  renderLandingRightPanel();
+}
+
+function ensureGeoRightPanel() {
+  if (!document.querySelector('.geo-right-panel')) return;
+  applyGeoRightPanelDelegation();
+  updateSectorStyles();
+  renderGeoRightPanel();
+}
+
+// ─── LANDING PAGE RIGHT SIDEBAR ───────────────────────────────────────────────
+
+function buildLandingStockRow(stock) {
+  const badge = getBadgeStyles(stock.label);
+  return `
+    <div data-action="landing-select-stock" data-ticker="${stock.ticker}"
+      style="padding:12px 0;border-bottom:1px solid #1e1e2e;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;transition:background 0.2s;"
+      onmouseenter="this.style.background='#1a1a2e'" onmouseleave="this.style.background='transparent'">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${stock.name}</div>
+      </div>
+      <div style="font-size:12px;font-family:monospace;color:${getScoreColor(stock.score)};min-width:55px;text-align:right;">${stock.score >= 0 ? '+' : ''}${stock.score.toFixed(2)}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div style="padding:2px 8px;border-radius:999px;background:${badge.background};color:${badge.color};font-size:11px;font-weight:600;white-space:nowrap;">${stock.label}</div>
+        <span style="color:#94a3b8;font-size:14px;">›</span>
+      </div>
+    </div>
+  `;
+}
+
+function buildLandingDetailTabContent() {
+  if (!landingSelectedStock) return '';
+  if (landingDetailTab === 'Overall') return '';
+  if (landingDetailTab === 'Fundamental') {
+    const f = landingSelectedStock.fundamental;
+    const colorFor = (value, type) => {
+      if (type === 'roe') return value >= 15 ? '#4ade80' : value >= 10 ? '#f59e0b' : '#f87171';
+      if (type === 'npa') return value <= 1.5 ? '#4ade80' : value <= 3 ? '#f59e0b' : '#f87171';
+      if (type === 'revenueGrowth') return value >= 0 ? '#4ade80' : '#f87171';
+      return '#ffffff';
+    };
+    return `
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">P/E vs Sector</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${f.pe} <span style="color:#94a3b8;font-size:11px;">vs ${f.sectorPE}</span></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">ROE</span>
+        <span style="color:${colorFor(f.roe,'roe')};font-size:13px;font-family:monospace;">${f.roe}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">NPA</span>
+        <span style="color:${colorFor(f.npa,'npa')};font-size:13px;font-family:monospace;">${f.npa}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Revenue Growth</span>
+        <span style="color:${colorFor(f.revenueGrowth,'revenueGrowth')};font-size:13px;font-family:monospace;">${f.revenueGrowth}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Promoter Holding</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${f.promoterHolding}%</span>
+      </div>
+    `;
+  }
+  if (landingDetailTab === 'Technical') {
+    const t = landingSelectedStock.technical;
+    const rsiColor = t.rsi > 70 ? '#f87171' : t.rsi < 30 ? '#4ade80' : '#94a3b8';
+    const rsiTag = t.rsi > 70 ? 'Overbought' : t.rsi < 30 ? 'Oversold' : 'Neutral';
+    const macdColor = t.macd.toLowerCase().includes('bullish') ? '#4ade80' : t.macd.toLowerCase().includes('bearish') ? '#f87171' : '#94a3b8';
+    const volumeColor = t.volumeTrend === 'Increasing' ? '#4ade80' : t.volumeTrend === 'Decreasing' ? '#f87171' : '#94a3b8';
+    const priceColor = t.priceVsWMA >= 0 ? '#4ade80' : '#f87171';
+    return `
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">RSI 14</span>
+        <span style="color:${rsiColor};font-size:13px;font-family:monospace;">${t.rsi} (${rsiTag})</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Price vs 20d WMA</span>
+        <span style="color:${priceColor};font-size:13px;font-family:monospace;">${t.priceVsWMA >= 0 ? '+' : ''}${t.priceVsWMA}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">MACD</span>
+        <span style="color:${macdColor};font-size:13px;font-family:monospace;">${t.macd}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Volume Trend</span>
+        <span style="color:${volumeColor};font-size:13px;font-family:monospace;">${t.volumeTrend}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Support</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${t.support.toFixed(2)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Resistance</span>
+        <span style="color:#fff;font-size:13px;font-family:monospace;">${t.resistance.toFixed(2)}</span>
+      </div>
+    `;
+  }
+  if (landingDetailTab === 'News AI') {
+    return landingSelectedStock.news.map(item => `
+      <div style="padding:12px 0;border-bottom:1px solid #1e1e2e;">
+        <div style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${item.sentiment==='POSITIVE'?'#14532d':item.sentiment==='NEGATIVE'?'#7f1d1d':'#334155'};color:${item.sentiment==='POSITIVE'?'#86efac':item.sentiment==='NEGATIVE'?'#fecaca':'#cbd5e1'};font-size:11px;font-family:monospace;font-weight:600;margin-bottom:6px;">${item.sentiment}</div>
+        <p style="margin:0 0 5px;color:#fff;font-size:13px;line-height:1.45;">${item.headline}</p>
+        <div style="color:#94a3b8;font-size:11px;">${item.source} · ${item.time}</div>
+      </div>
+    `).join('');
+  }
+  return '';
+}
+
+function buildLandingSignalBarHTML(fullLabel, value) {
+  const isPositive = value >= 0;
+  const fillPercent = Math.min(50, Math.abs(value) * 50);
+  const color = isPositive ? '#4ade80' : '#f87171';
+  const left = isPositive ? 50 : 50 - fillPercent;
+  const sign = value > 0 ? '+' : '';
+  return `
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">${fullLabel}</span>
+        <span style="font-size:12px;font-family:monospace;color:${color};font-weight:500;">${sign}${value.toFixed(2)}</span>
+      </div>
+      <div style="position:relative;height:6px;background:#1e1e2e;border-radius:3px;">
+        <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:#333;"></div>
+        <div style="position:absolute;top:0;height:100%;border-radius:3px;background:${color};width:${fillPercent}%;left:${left}%;transition:all 0.4s ease;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:3px;">
+        <span style="color:#444;font-size:10px;font-family:monospace;">-1</span>
+        <span style="color:#444;font-size:10px;font-family:monospace;">0</span>
+        <span style="color:#444;font-size:10px;font-family:monospace;">+1</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderLandingRightPanel() {
+  const panelWrap = document.querySelector('#right-signal-panel .panel-content-wrap');
+  if (!panelWrap) return;
+
+  let html = '';
+
+  if (landingSidebarMode === 'list') {
+    if (!selectedSector) {
+      html = `<div style="padding:40px 20px;text-align:center;color:#94a3b8;font-size:13px;">Select a sector to see top stocks</div>`;
+    } else {
+      const stocks = sectorStocks[selectedSector] || [];
+      html = `
+        <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1e1e2e;">
+          <div style="font-size:11px;font-family:monospace;color:#94a3b8;text-transform:uppercase;letter-spacing:0.12em;">TOP STOCKS</div>
+          <div style="font-size:15px;color:#fff;font-family:monospace;margin-top:6px;font-weight:600;">${selectedSector}</div>
+        </div>
+        <div>${stocks.map(buildLandingStockRow).join('')}</div>
+      `;
+    }
+  } else if (landingSidebarMode === 'detail' && landingSelectedStock) {
+    const stock = landingSelectedStock;
+    const badge = getBadgeStyles(stock.label);
+    const scoreColor = getScoreColor(stock.score);
+    const scoreFill = Math.min(50, Math.abs(stock.score) * 50);
+    const scoreLeft = stock.score >= 0 ? 50 : 50 - scoreFill;
+    const tabs = ['Overall','Fundamental','Technical','News AI'];
+    const tabButtons = tabs.map(tab => `
+      <button data-action="landing-detail-tab" data-tab="${tab}"
+        style="flex:1;padding:8px 0;border:none;background:none;color:${landingDetailTab===tab?'#fff':'#94a3b8'};border-bottom:2px solid ${landingDetailTab===tab?'#4ade80':'transparent'};font-family:monospace;font-size:11px;cursor:pointer;transition:all 0.2s;">${tab}</button>
+    `).join('');
+    const signalBars = [
+      { label: 'Fundamental', value: stock.breakdown.F },
+      { label: 'Technical',   value: stock.breakdown.T },
+      { label: 'News',        value: stock.breakdown.N },
+      { label: 'Global',      value: stock.breakdown.G },
+    ].map(b => buildLandingSignalBarHTML(b.label, b.value)).join('');
+
+    html = `
+      <div style="padding-bottom:12px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <button data-action="landing-back" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0;">←</button>
+        <div style="flex:1;color:#fff;font-size:15px;font-weight:700;font-family:monospace;">${stock.name}</div>
+        <div style="padding:3px 8px;border-radius:999px;background:${badge.background};color:${badge.color};font-size:11px;white-space:nowrap;">${stock.label}</div>
+      </div>
+      <div style="margin-top:14px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;font-family:monospace;margin-bottom:6px;">
+          <span>FUSION SCORE</span>
+          <span style="color:${scoreColor};font-weight:600;">${stock.score >= 0 ? '+' : ''}${stock.score.toFixed(2)}</span>
+        </div>
+        <div style="position:relative;height:6px;background:#1e1e2e;border-radius:999px;">
+          <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:#333;transform:translateX(-50%);"></div>
+          <div style="position:absolute;top:0;height:100%;width:${scoreFill}%;left:${scoreLeft}%;background:${scoreColor};border-radius:999px;transition:all 0.4s ease;"></div>
+        </div>
+      </div>
+      <div style="height:1px;background:#1e1e2e;margin:14px 0;"></div>
+      <div style="margin-bottom:14px;">${signalBars}</div>
+      <div style="display:flex;gap:4px;border-bottom:1px solid #1e1e2e;margin-bottom:14px;">${tabButtons}</div>
+      <div id="landing-detail-tab-content">${landingDetailTab === 'Overall' ? '' : buildLandingDetailTabContent()}</div>
+    `;
+  }
+
+  // Preserve the original static parts (card-header, score-breakdown, analysis-tabs, ai-explainer)
+  // by only injecting content into a dedicated sub-container
+  let landingDynamic = document.getElementById('landing-dynamic-content');
+  if (!landingDynamic) {
+    // Create it once, above the existing static card
+    landingDynamic = document.createElement('div');
+    landingDynamic.id = 'landing-dynamic-content';
+    landingDynamic.style.cssText = 'border-bottom:1px solid #1e1e2e;padding-bottom:14px;margin-bottom:14px;';
+    panelWrap.insertBefore(landingDynamic, panelWrap.firstChild);
+  }
+  landingDynamic.innerHTML = html;
+}
+
+function handleLandingRightPanelClick(event) {
+  const stockRow = event.target.closest('[data-action="landing-select-stock"]');
+  if (stockRow) {
+    const ticker = stockRow.dataset.ticker;
+    if (selectedSector && sectorStocks[selectedSector]) {
+      const stock = sectorStocks[selectedSector].find(s => s.ticker === ticker);
+      if (stock) setLandingStock(stock);
+    }
+    return;
+  }
+  const back = event.target.closest('[data-action="landing-back"]');
+  if (back) {
+    landingSelectedStock = null;
+    landingSidebarMode = 'list';
+    landingDetailTab = 'Overall';
+    renderLandingRightPanel();
+    return;
+  }
+  const tabBtn = event.target.closest('[data-action="landing-detail-tab"]');
+  if (tabBtn) {
+    landingDetailTab = tabBtn.dataset.tab;
+    renderLandingRightPanel();
+    return;
+  }
+}
+
+function getCountryName(feature) {
+  return feature?.properties?.name || feature?.properties?.NAME || feature?.properties?.ADMIN || feature?.properties?.admin || null;
+}
 
 // Morph Projection (Sphere -> Flat)
 function projectMorph(lng, lat, progress, centerLng) {
@@ -163,10 +932,12 @@ function renderFlatMap(features) {
   
   features.forEach((f, idx) => {
     if (!f.geometry || !f.geometry.coordinates) return;
-    const baseColor = countryColors[f.properties.NAME] || countryColors[f.properties.ADMIN];
+    const name = getCountryName(f);
+    const entry = getTensionByName(name);
+    const baseColor = entry ? getTensionColor(entry.score) : (countryColors[f.properties.NAME] || countryColors[f.properties.ADMIN]);
     const fill = baseColor ? baseColor : 'rgba(200, 200, 200, 0.08)';
     // Removed the slow SVG filter="url(#bevel3d)" entirely from paths. 
-    svgPaths += `<path id="path-geo-${idx}" class="map-country" fill="${fill}" data-country="${f.properties.NAME}"></path>`;
+    svgPaths += `<path id="path-geo-${idx}" class="map-country" fill="${fill}" data-country="${name || f.properties.NAME}"></path>`;
   });
   
   mapContainer.innerHTML = svgHeader + svgPaths + '</svg>';
@@ -181,10 +952,16 @@ function renderFlatMap(features) {
   
   // Interactivity
   document.querySelectorAll('.map-country').forEach(p => {
-    p.addEventListener('click', () => {
+    p.addEventListener('click', (e) => {
+       // Mock UI update on click
+       const cName = e.target.getAttribute('data-country') || 'ASSET';
+       const title = document.getElementById('active-asset-title');
+       if (title) {
+           title.innerHTML = cName.substring(0, 10).toUpperCase() + ` <span style="opacity:0.4; font-size:10px;">/ USD</span>`;
+       }
        generateChartData();
     });
-    p.style.pointerEvents = 'auto'; 
+    // Removed hardcoded pointerEvents here. We handle it in animateUnroll.
   });
   
   // Initially map is transparent
@@ -192,24 +969,62 @@ function renderFlatMap(features) {
   updateMapMorph(0);
 }
 
-fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')
+fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
   .then(res => res.json())
-  .then(countries => {
-    globeFeatures = countries.features;
-    world.polygonsData(countries.features)
-      .polygonCapColor(d => {
-        const baseColor = countryColors[d.properties.NAME] || countryColors[d.properties.ADMIN];
-        if (d === hoverD) return baseColor ? baseColor + 'aa' : 'rgba(34, 197, 94, 0.4)';
-        return baseColor ? baseColor + '44' : 'rgba(200, 200, 200, 0.05)';
-      })
-      .polygonSideColor(() => 'rgba(0, 0, 0, 0.15)')
-      .polygonStrokeColor(() => '#111')
+  .then(async data => {
+    const topojson = await import('topojson-client');
+    const geojson = topojson.feature(data, data.objects.countries);
+    countriesGeo = geojson.features;
+    globeFeatures = countriesGeo;
+
+    world.polygonsData(countriesGeo)
       .polygonAltitude(d => d === hoverD ? 0.06 : 0.01)
+      .polygonCapColor(d => {
+        const name = getCountryName(d);
+        const entry = getTensionByName(name);
+        const iso = getCountryISO(d);
+        const isSelected = selectedCountry && selectedCountry.name === name;
+        if (d === hoverD) return entry ? getTensionColor(entry.score) + 'aa' : 'rgba(34, 197, 94, 0.4)';
+        if (isSelected) return entry ? getTensionColor(entry.score) + 'cc' : 'rgba(34, 197, 94, 0.25)';
+        // Sector-based highlighting
+        if (selectedSector && sectorCountryMap[selectedSector]) {
+          const relevantIsos = sectorCountryMap[selectedSector];
+          if (iso && relevantIsos.includes(iso)) return '#4ade80';
+          return 'rgba(255,255,255,0.02)';
+        }
+        return entry ? getTensionColor(entry.score) + '44' : 'rgba(255,255,255,0.03)';
+      })
+      .polygonSideColor(() => 'rgba(255, 255, 255, 0.05)')
+      .polygonStrokeColor(() => '#2a2a3a')
+      .polygonLabel(d => {
+        const name = getCountryName(d);
+        const entry = getTensionByName(name);
+        if (!entry) return '';
+        return `
+          <div style="background:#111827; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 12px; color:white; font-family:Inter,sans-serif; font-size:12px; min-width:160px;">
+            <div style="font-weight:600; margin-bottom:6px;">${entry.name}</div>
+            <div style="color:#f59e0b; margin-bottom:6px;">Tension: ${entry.score}/100</div>
+            <div style="color:#9ca3af; font-size:11px;">${entry.commodities.join(' · ')}</div>
+          </div>`;
+      })
       .onPolygonHover(d => {
         hoverD = d;
         world.polygonCapColor(world.polygonCapColor());
         world.polygonAltitude(world.polygonAltitude());
+      })
+      .onPolygonClick(d => {
+        const name = getCountryName(d);
+        const entry = getTensionByName(name);
+        if (!entry) return;
+        setSelectedCountry(entry);
+        showGeoView();
       });
+
+    // Point interaction
+    world.onPointClick(d => {
+       world.pointOfView({ lat: d.lat, lng: d.lng, altitude: 1 }, 1000);
+       generateChartData(); // Mock signal data change
+    });
       
     // Render the SPA flat map version
     renderFlatMap(globeFeatures);
@@ -304,22 +1119,26 @@ function animateUnroll() {
          } else {
             svgMap.style.filter = 'none';
          }
+         
+         // Fix Invisible Hitbox Blocker:
+         // The SVG paths MUST be unclickable when globe is visible, otherwise they block everything below them!
+         if (sOp <= 0.02) {
+            svgMap.style.visibility = 'hidden';
+            svgMap.style.pointerEvents = 'none';
+            const svgEl = svgMap.querySelector('svg');
+            if(svgEl) svgEl.style.pointerEvents = 'none';
+         } else {
+            svgMap.style.visibility = 'visible';
+            svgMap.style.pointerEvents = 'auto';
+            const svgEl = svgMap.querySelector('svg');
+            if(svgEl) svgEl.style.pointerEvents = 'auto';
+            document.querySelectorAll('.map-country').forEach(p => p.style.pointerEvents = 'auto');
+         }
       }
       lastComputedAnim = computedAnim;
   }
 
-  // Auto-minimize the left filter panel based on scrolling down
-  const leftPanel = document.getElementById('left-filter-panel');
-  if (leftPanel) {
-    const minBtnNode = leftPanel.querySelector('.minimize-btn svg');
-    if (computedAnim > 0.1 && !leftPanel.classList.contains('minimized')) {
-       leftPanel.classList.add('minimized');
-       if(minBtnNode) minBtnNode.style.transform = 'rotate(180deg)';
-    } else if (computedAnim <= 0.02 && leftPanel.classList.contains('minimized')) {
-       leftPanel.classList.remove('minimized');
-       if(minBtnNode) minBtnNode.style.transform = 'rotate(0deg)';
-    }
-  }
+  // Panels stay open — user controls minimize manually via the button
 
   // Smoothly remove bottom news line
   const bottomPanel = document.getElementById('earth-footer');
@@ -365,7 +1184,61 @@ tl.from('.top-nav', { y: -50, opacity: 0, duration: 0.8, ease: "power3.out" })
   .from('.signal-bars', { opacity: 0, duration: 0.4 }, '-=0.2');
 
 
-// 5. Setup UI interactions
+// Manual Minimization logic for Left Panel
+const leftMinBtn = document.getElementById('minimize-left-btn');
+const leftFilterPanel = document.getElementById('left-filter-panel');
+let userManuallyClosed = false; // Guard: prevents RAF loop from overriding manual clicks
+let hasPageScrolled = false;
+
+window.addEventListener('scroll', () => {
+  hasPageScrolled = window.scrollY > 10;
+});
+
+function openPanel(panel, button) {
+  if (!panel) return;
+  panel.classList.remove('minimized');
+  if (button) {
+    const icon = button.querySelector('svg');
+    if (icon) icon.style.transform = 'rotate(0deg)';
+  }
+}
+
+function togglePanel(panel, button) {
+  if (!panel) return;
+  panel.classList.toggle('minimized');
+  if (button) {
+    const icon = button.querySelector('svg');
+    if (icon) icon.style.transform = panel.classList.contains('minimized') ? 'rotate(180deg)' : 'rotate(0deg)';
+  }
+}
+
+if (leftFilterPanel && leftMinBtn) {
+  openPanel(leftFilterPanel, leftMinBtn);
+  leftMinBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    userManuallyClosed = !leftFilterPanel.classList.contains('minimized'); // will be closed after toggle
+    togglePanel(leftFilterPanel, leftMinBtn);
+  });
+}
+
+const rightMinBtn = document.getElementById('minimize-right-btn');
+const rightSignalPanel = document.getElementById('right-signal-panel');
+let userManuallyClosedRight = false;
+
+if (rightSignalPanel && rightMinBtn) {
+  openPanel(rightSignalPanel, rightMinBtn);
+  rightMinBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    userManuallyClosedRight = !rightSignalPanel.classList.contains('minimized');
+    togglePanel(rightSignalPanel, rightMinBtn);
+  });
+}
+
+// Keep right panel content visible and aligned when in fullscreen or small layout
+if (rightSignalPanel) {
+  rightSignalPanel.style.minWidth = '320px';
+}
+
 // Tabs logic for Signal Card
 const subTabs = document.querySelectorAll('.sub-tab');
 subTabs.forEach(tab => {
@@ -389,6 +1262,133 @@ subTabs.forEach(tab => {
     panel.classList.add('active');
   });
 });
+
+// Sector List interactions
+const sectorListItems = document.querySelectorAll('.sector-list li:not(.disabled)');
+sectorListItems.forEach(li => {
+  li.addEventListener('click', () => {
+    document.querySelectorAll('.sector-list li').forEach(l => l.classList.remove('active'));
+    li.classList.add('active');
+    const selected = li.dataset.sector || li.textContent.trim().split(' ')[0];
+    setSelectedSector(selected);
+    gsap.from('.stock-list', { opacity: 0.5, y: 5, duration: 0.3 });
+  });
+});
+
+function getRegimeLabel() {
+  const regimeStat = Array.from(document.querySelectorAll('.stat')).find(stat => {
+    const label = stat.querySelector('.label');
+    return label?.textContent.trim().toUpperCase() === 'REGIME:';
+  });
+  return regimeStat?.querySelector('.value')?.textContent.trim() || 'FED POLICY DAY';
+}
+
+function formatSignalValue(value) {
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}`;
+}
+
+function buildSignalBarHTML(fullLabel, value) {
+  const isPositive = value >= 0;
+  const fillPercent = Math.min(50, Math.abs(value) * 50);
+  const color = isPositive ? '#4ade80' : '#f87171';
+  const left = isPositive ? 50 : 50 - fillPercent;
+
+  return `
+    <div class="signal-bar-row">
+      <div class="signal-bar-header">
+        <span>${fullLabel}</span>
+        <span class="signal-bar-value" style="color:${color};">${formatSignalValue(value)}</span>
+      </div>
+      <div class="signal-bar-track">
+        <div class="signal-bar-center"></div>
+        <div class="signal-bar-fill" style="width:${fillPercent}%; left:${left}%; background:${color};"></div>
+      </div>
+      <div class="signal-bar-scale">
+        <span>-1</span>
+        <span>0</span>
+        <span>+1</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderSignalBars(result) {
+  const container = document.getElementById('signal-bars-container');
+  if (!container || !result || !result.breakdown) return;
+
+  const bars = [
+    { fullLabel: 'Fundamental', value: result.breakdown.F },
+    { fullLabel: 'Technical', value: result.breakdown.T },
+    { fullLabel: 'News', value: result.breakdown.N },
+    { fullLabel: 'Global', value: result.breakdown.G },
+  ];
+
+  container.innerHTML = bars.map(bar => buildSignalBarHTML(bar.fullLabel, bar.value)).join('');
+}
+
+const fusionInputs = {
+  HDFCBANK: {
+    fundamentalData: { pe: 12.5, sectorPE: 18, roe: 16.5, npa: 1.1, revenueGrowth: 12 },
+    technicalData: { rsi: 66, priceVsWMA: 1.8, macd: -0.22, volumeTrend: -0.4 },
+    newsItems: [
+      { timestamp: new Date().toISOString(), sentiment: 'positive' },
+      { timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), sentiment: 'neutral' }
+    ]
+  },
+  SBIN: {
+    fundamentalData: { pe: 9.8, sectorPE: 18, roe: 14.2, npa: 2.2, revenueGrowth: 8 },
+    technicalData: { rsi: 58, priceVsWMA: -0.5, macd: 0.18, volumeTrend: 0.6 },
+    newsItems: [
+      { timestamp: new Date().toISOString(), sentiment: 'positive' },
+      { timestamp: new Date(Date.now() - 14 * 3600000).toISOString(), sentiment: 'positive' }
+    ]
+  },
+  ICICIBANK: {
+    fundamentalData: { pe: 11.2, sectorPE: 18, roe: 15.8, npa: 1.4, revenueGrowth: 10 },
+    technicalData: { rsi: 62, priceVsWMA: 0.9, macd: 0.05, volumeTrend: 0.2 },
+    newsItems: [
+      { timestamp: new Date().toISOString(), sentiment: 'neutral' },
+      { timestamp: new Date(Date.now() - 28 * 3600000).toISOString(), sentiment: 'positive' }
+    ]
+  },
+  AXISBANK: {
+    fundamentalData: { pe: 13.9, sectorPE: 18, roe: 12.1, npa: 3.2, revenueGrowth: 6 },
+    technicalData: { rsi: 72, priceVsWMA: 2.7, macd: -0.35, volumeTrend: -0.5 },
+    newsItems: [
+      { timestamp: new Date().toISOString(), sentiment: 'negative' },
+      { timestamp: new Date(Date.now() - 8 * 3600000).toISOString(), sentiment: 'neutral' }
+    ]
+  }
+};
+
+function renderFusionSidebar(symbol) {
+  const inputs = fusionInputs[symbol] || fusionInputs.HDFCBANK;
+  const regimeLabel = getRegimeLabel();
+  const result = calcFusionScore({
+    ...inputs,
+    regimeLabel,
+  });
+
+  const finalScoreEl = document.getElementById('final-score');
+  const badgeEl = document.querySelector('.signal-tag');
+  if (finalScoreEl) {
+    finalScoreEl.textContent = result.score >= 0 ? `+${result.score.toFixed(2)}` : result.score.toFixed(2);
+  }
+  if (badgeEl) {
+    badgeEl.textContent = result.label;
+    badgeEl.style.color = result.color;
+    badgeEl.style.borderColor = result.color;
+    badgeEl.style.background = `${result.color}22`;
+  }
+
+  const panelFusionScore = document.getElementById('panel-fusion-score');
+  if (panelFusionScore) {
+    panelFusionScore.textContent = result.score >= 0 ? `+${result.score.toFixed(2)}` : result.score.toFixed(2);
+  }
+
+  renderSignalBars(result);
+}
 
 // Use Anime.js for hover effects on stock list
 const stockItems = document.querySelectorAll('.stock-item');
@@ -424,12 +1424,55 @@ stockItems.forEach(item => {
     });
     item.classList.add('active');
     
-    // Change main card title & signal dummy data based on selection
+    // Change main card title & update fusion score sidebar
     const symbol = item.getAttribute('data-stock');
-    document.getElementById('current-stock').innerText = symbol;
+    const currentStockEl = document.getElementById('current-stock');
+    if (currentStockEl) currentStockEl.innerText = symbol;
+    renderFusionSidebar(symbol);
     
     // Simple UI change animation on selection
     gsap.from('.main-signal-card', { opacity: 0.5, scale: 0.98, duration: 0.3, ease: "power1.out"});
+  });
+});
+
+renderFusionSidebar('HDFCBANK');
+ensureGeoRightPanel();
+
+// Wire landing right panel click delegation
+const landingRightPanelEl = document.getElementById('right-signal-panel');
+if (landingRightPanelEl) {
+  landingRightPanelEl.addEventListener('click', handleLandingRightPanelClick);
+}
+// Initial render for landing page right sidebar
+renderLandingRightPanel();
+
+const assetCards = document.querySelectorAll('.asset-card');
+const activeAssetTitle = document.getElementById('active-asset-title');
+const activeAssetIndicator = document.getElementById('active-asset-indicator');
+const assetData = {
+  RUB: { indicator: '▲ 0.00%', color: 'green', pair: '/ USD' },
+  OIL: { indicator: '▼ -0.88%', color: 'red', pair: '/ USD' },
+  GOLD: { indicator: '▲ 1.51%', color: 'green', pair: '/ USD' },
+  GAS: { indicator: '▼ -1.47%', color: 'red', pair: '/ USD' }
+};
+
+assetCards.forEach(card => {
+  card.addEventListener('click', () => {
+    assetCards.forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+
+    const asset = card.dataset.asset;
+    const assetInfo = assetData[asset] || { indicator: '—', color: 'green', pair: '/ USD' };
+    if (activeAssetTitle) {
+      activeAssetTitle.innerText = `${asset} ${assetInfo.pair}`;
+    }
+    if (activeAssetIndicator) {
+      activeAssetIndicator.innerText = assetInfo.indicator;
+      activeAssetIndicator.classList.toggle('green', assetInfo.color === 'green');
+      activeAssetIndicator.classList.toggle('red', assetInfo.color === 'red');
+    }
+
+    gsap.from('.chart-header', { opacity: 0.5, y: 8, duration: 0.25, ease: 'power1.out' });
   });
 });
 
@@ -440,6 +1483,8 @@ gsap.to('.ticker-content', {
   duration: 20,
   repeat: -1
 });
+
+// showGeoView defined earlier in file (line ~208), no duplicate needed
 
 // Top Nav Tabs interaction
 const mainTabs = document.querySelectorAll('.top-nav .tab');
@@ -600,32 +1645,9 @@ let activeRegion = 'all';
 
 document.querySelectorAll('.region-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeRegion = btn.dataset.region;
-
-    const filtered = activeRegion === 'all'
-      ? geoEvents
-      : geoEvents.filter(e => e.region === activeRegion);
-
-    world.pointsData(filtered);
+    setSelectedRegion(btn.dataset.region);
   });
 });
+updateRegionButtons();
 
-// Panel minimize logic
-const minBtn = document.getElementById('minimize-left-btn');
-if (minBtn) {
-  minBtn.addEventListener('click', () => {
-    const leftPanel = document.getElementById('left-filter-panel');
-    leftPanel.classList.toggle('minimized');
-    
-    // Rotate the arrow icon softly based on toggle state
-    const icon = minBtn.querySelector('svg');
-    if (leftPanel.classList.contains('minimized')) {
-      icon.style.transform = 'rotate(180deg)';
-    } else {
-      icon.style.transform = 'rotate(0deg)';
-    }
-  });
-}
 

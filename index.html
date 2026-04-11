@@ -11,7 +11,7 @@
     <!-- 3D Globe Background -->
     <div id="globeViz"></div>
 
-    <header class="top-nav glass" style="position: fixed; top: 0; left: 0; width: 100%; z-index: 100;">
+    <header class="top-nav glass">
       <div class="logo">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="pulse-icon" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
         PulseStock <span class="badge">v1.0</span>
@@ -70,9 +70,9 @@
 
               <h3>SELECT SECTOR</h3>
               <ul class="sector-list">
-                <li class="active">Banking (Nifty Bank)</li>
-                <li class="disabled">IT (Phase 2)</li>
-                <li class="disabled">Pharma (Phase 2)</li>
+                <li class="active" data-sector="Banking">Banking (Nifty Bank)</li>
+                <li data-sector="IT">IT (Nifty IT)</li>
+                <li data-sector="Pharma">Pharma (Nifty Pharma)</li>
               </ul>
 
               <h3 style="margin-top:20px;">TRACKED BANKS</h3>
@@ -135,102 +135,13 @@
         <!-- Right Panel: Multi-Signal Engine -->
         <aside class="right-panel">
           
-          <div class="panel glass slide-in-right main-signal-card">
-             <div class="card-header">
-                <h2 id="current-stock">HDFC BANK</h2>
-                <div class="signal-tag amber">Conflicted</div>
-             </div>
-             
-             <div class="score-breakdown">
-                <h4>FUSION SCORE: <span id="final-score">+0.18</span></h4>
-                <div class="progress-bar">
-                   <div class="progress-fill amber" style="width: 58%; left: 42%;"></div>
-                </div>
-                <!-- Signal contribution bars -->
-                <div class="signal-bars" style="margin: 10px 0 6px">
-                  <div class="sbar-row">
-                    <span class="sbar-key">F</span>
-                    <div class="sbar-track"><div class="sbar-fill" id="bar-f" style="width:61%;background:#22c55e"></div></div>
-                    <span class="sbar-num green" id="num-f">+0.61</span>
-                  </div>
-                  <div class="sbar-row">
-                    <span class="sbar-key">T</span>
-                    <div class="sbar-track"><div class="sbar-fill" id="bar-t" style="width:30%;background:#ef4444"></div></div>
-                    <span class="sbar-num red" id="num-t">−0.30</span>
-                  </div>
-                  <div class="sbar-row">
-                    <span class="sbar-key">N</span>
-                    <div class="sbar-track"><div class="sbar-fill" id="bar-n" style="width:22%;background:#3b82f6"></div></div>
-                    <span class="sbar-num" style="color:#3b82f6" id="num-n">+0.22</span>
-                  </div>
-                  <div class="sbar-row">
-                    <span class="sbar-key amber">G</span>
-                    <div class="sbar-track"><div class="sbar-fill" id="bar-g" style="width:55%;background:#f59e0b"></div></div>
-                    <span class="sbar-num amber" id="num-g">↑ elevated</span>
-                  </div>
-                </div>
-                <div class="weights">α=0.45 <span class="divider">|</span> β=0.25 <span class="divider">|</span> γ=0.30</div>
-             </div>
-
-             <!-- Sub Tabs for Details -->
-             <div class="analysis-tabs">
-               <button class="sub-tab active" data-panel="fundamental">Fundamental</button>
-               <button class="sub-tab" data-panel="technical">Technical</button>
-               <button class="sub-tab" data-panel="sentiment">News AI</button>
-             </div>
-
-             <div class="tab-content-container">
-               <!-- Fundamental Panel -->
-               <div id="panel-fundamental" class="sub-panel active">
-                 <div class="metric">
-                   <span>P/E vs Median</span>
-                   <span class="green">+0.36 (18 vs 22)</span>
-                 </div>
-                 <div class="metric">
-                   <span>ROE (10-20%)</span>
-                   <span class="green">+0.20 (16.5%)</span>
-                 </div>
-                 <div class="metric">
-                   <span>D/E Ratio</span>
-                   <span class="green">+0.18 (0.72)</span>
-                 </div>
-                 <div class="panel-total">FUNDAMENTAL SCORE: +0.61</div>
-               </div>
-
-               <!-- Technical Panel -->
-               <div id="panel-technical" class="sub-panel hidden">
-                 <div class="metric">
-                   <span>RSI 14</span>
-                   <span class="red">-0.60 (RSI 68)</span>
-                 </div>
-                 <div class="metric">
-                   <span>Price vs 20d WMA</span>
-                   <span class="amber">0.00 (Neutral)</span>
-                 </div>
-                 <div class="panel-total">TECHNICAL SCORE: -0.30</div>
-               </div>
-
-               <!-- Sentiment Panel -->
-               <div id="panel-sentiment" class="sub-panel hidden">
-                 <div class="news-item">
-                    <p class="headline">"Strong credit growth reported in Q4..."</p>
-                    <span class="kw-tag green">+0.7</span>
-                 </div>
-                 <div class="news-item">
-                    <p class="headline">"RBI signals mild tone on liquidity..."</p>
-                    <span class="kw-tag amber">+0.2 (LLM)</span>
-                 </div>
-                 <div class="panel-total">SENTIMENT SCORE: +0.22</div>
-               </div>
-             </div>
-
-             <!-- AI Signal Explainer -->
-             <div class="ai-explainer">
-                <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12 2.1 7.1"></path></svg> AI EXPLAINER</h4>
-                <p id="explainer-text">
-                  HDFC's fundamentals remain strong but the technical picture is flashing caution — RSI is approaching overbought territory. Today's Fed policy regime means technical signals are weighted more heavily... The conflicted signal suggests waiting for RSI to cool before acting.
-                </p>
-             </div>
+          <div class="panel glass slide-in-right main-signal-card" id="right-signal-panel">
+            <button class="minimize-btn" id="minimize-right-btn" title="Toggle Panel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <div class="panel-content-wrap">
+              <!-- Dynamic content injected by renderLandingRightPanel() -->
+            </div>
           </div>
 
         </aside>
@@ -328,6 +239,7 @@
                   <button class="join-waitlist-btn">● JOIN WAITLIST</button>
                </div>
             </div>
+          </div>
             
             <div class="bottom-trend-panel glass">
                <div class="trend-left">
