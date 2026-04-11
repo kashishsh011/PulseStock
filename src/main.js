@@ -75,61 +75,121 @@ const countryColors = {
 };
 let hoverD;
 let globeFeatures = [];
+let pathNodes = [];
+let capturedCenterLng = 0;
 
-// Custom Mercator projection for the SVG map
-function mercator(lng, lat, width=1000, height=650) {
-  const x = (lng + 180) * (width / 360);
+// Morph Projection (Sphere -> Flat)
+function projectMorph(lng, lat, progress, centerLng) {
+  // FLAT target (Mercator, adjusted for SVG viewport)
+  const xf = (lng + 180) * (1000 / 360) * 0.95 + 10;
   const latRad = lat * Math.PI / 180;
   const mercN = Math.log(Math.tan((Math.PI / 4) + (latRad / 2)));
-  const y = (height / 2) - (width * mercN / (2 * Math.PI));
-  // Shift SVG to fit bounds slightly better
-  return [x * 0.95 + 10, y * 1.1 - 40];
+  const yf = Math.max(-1000, Math.min(1500, (650 / 2) - (1000 * mercN / (2 * Math.PI)))) * 1.1 - 40;
+
+  // SPHERE target (Orthographic)
+  const R = 300; 
+  let dLng = lng - centerLng;
+  while (dLng > 180) dLng -= 360;
+  while (dLng < -180) dLng += 360;
+  let rLng = dLng * Math.PI / 180;
+
+  // Fold back-face to avoid messy crisscrosses at start
+  if (progress < 0.05 && Math.cos(rLng) < 0) {
+      rLng = Math.sign(rLng) * Math.PI/2; 
+  } else if (progress < 1) {
+      if (Math.cos(rLng) < 0) {
+         const edgeLng = Math.sign(rLng) * Math.PI/2;
+         rLng = edgeLng + (rLng - edgeLng) * Math.pow(progress, 0.4); 
+      }
+  }
+  
+  const xs = 500 + R * Math.cos(latRad) * Math.sin(rLng);
+  // Subtract Y due to SVG coordinates being flipped vs Cartesian
+  const ys = 325 - R * Math.sin(latRad);
+
+  // Easing curve (smooth step) - quicker mid-section for punchier feel
+  const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+  const x = xs + (xf - xs) * ease;
+  const y = ys + (yf - ys) * ease;
+  return [x.toFixed(1), y.toFixed(1)];
+}
+
+function updateMapMorph(progress) {
+  for(let i=0; i<pathNodes.length; i++) {
+     let f = pathNodes[i].feature;
+     let d = '';
+     if (!f.geometry || !f.geometry.coordinates) continue;
+     
+     if (f.geometry.type === 'Polygon') {
+        d += 'M ';
+        f.geometry.coordinates[0].forEach((pt, idx) => {
+           const [x,y] = projectMorph(pt[0], pt[1], progress, capturedCenterLng);
+           d += `${x},${y} ${idx === f.geometry.coordinates[0].length-1 ? 'Z' : 'L '}`;
+        });
+     } else if (f.geometry.type === 'MultiPolygon') {
+        f.geometry.coordinates.forEach(poly => {
+           d += ' M ';
+           poly[0].forEach((pt, idx) => {
+              const [x,y] = projectMorph(pt[0], pt[1], progress, capturedCenterLng);
+              d += `${x},${y} ${idx === poly[0].length-1 ? 'Z' : 'L '}`;
+           });
+        });
+     }
+     pathNodes[i].node.setAttribute('d', d);
+  }
 }
 
 function renderFlatMap(features) {
   const mapContainer = document.getElementById('svg-map-container');
   if(!mapContainer) return;
-  const svgHeader = `<svg class="flat-map-svg" viewBox="0 0 1000 650" xmlns="http://www.w3.org/2000/svg">`;
+  
+  // Add a defs section for the 3D bevel/gradient effect on the paths
+  const svgHeader = `<svg class="flat-map-svg" viewBox="0 0 1000 650" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <filter id="bevel3d" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="3" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.8"/>
+        <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+      </filter>
+      <radialGradient id="oceanGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="60%" stop-color="rgba(10,14,20,0)"/>
+        <stop offset="100%" stop-color="rgba(255,255,255,0.02)"/>
+      </radialGradient>
+    </defs>
+    <!-- Background circle that mimics the globe's ocean when progress=0 -->
+    <circle id="ocean-bg" cx="500" cy="325" r="300" fill="url(#oceanGlow)" opacity="1"/>
+  `;
   let svgPaths = '';
   
-  features.forEach(f => {
-    let pathObj = '';
+  features.forEach((f, idx) => {
     if (!f.geometry || !f.geometry.coordinates) return;
-    const type = f.geometry.type;
-    const coords = f.geometry.coordinates;
     const baseColor = countryColors[f.properties.NAME] || countryColors[f.properties.ADMIN];
     const fill = baseColor ? baseColor : 'rgba(200, 200, 200, 0.08)';
-    
-    // Very naive vanilla path drawer for geojson coordinates -> SVG
-    if (type === 'Polygon') {
-      let d = 'M ';
-      coords[0].forEach((pt, i) => {
-         const [x,y] = mercator(pt[0], pt[1]);
-         d += `${x},${y} ${i === coords[0].length-1 ? 'Z' : 'L '}`;
-      });
-      pathObj = `<path class="map-country" d="${d}" fill="${fill}" data-country="${f.properties.NAME}"></path>`;
-    } else if (type === 'MultiPolygon') {
-      let d = '';
-      coords.forEach(poly => {
-         d += ' M ';
-         poly[0].forEach((pt, i) => {
-           const [x,y] = mercator(pt[0], pt[1]);
-           d += `${x},${y} ${i === poly[0].length-1 ? 'Z' : 'L '}`;
-         });
-      });
-      pathObj = `<path class="map-country" d="${d}" fill="${fill}" data-country="${f.properties.NAME}"></path>`;
-    }
-    svgPaths += pathObj;
+    // Removed the slow SVG filter="url(#bevel3d)" entirely from paths. 
+    svgPaths += `<path id="path-geo-${idx}" class="map-country" fill="${fill}" data-country="${f.properties.NAME}"></path>`;
   });
   
   mapContainer.innerHTML = svgHeader + svgPaths + '</svg>';
   
-  // Enable interactivity for flat map
+  // Cache for performance
+  pathNodes = [];
+  features.forEach((f, idx) => {
+    if (!f.geometry || !f.geometry.coordinates) return;
+    const node = document.getElementById(`path-geo-${idx}`);
+    if (node) pathNodes.push({ node, feature: f });
+  });
+  
+  // Interactivity
   document.querySelectorAll('.map-country').forEach(p => {
     p.addEventListener('click', () => {
        generateChartData();
     });
+    p.style.pointerEvents = 'auto'; 
   });
+  
+  // Initially map is transparent
+  mapContainer.style.opacity = '0';
+  updateMapMorph(0);
 }
 
 fetch('https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')
@@ -162,26 +222,20 @@ world.controls().autoRotateSpeed = 0.5;
 // Prevent zooming for SPA layout consistency
 world.controls().enableZoom = false;
 
-// Custom SPA scroll transitions
+// Custom SPA scroll transitions: Unrolling the Earth
 let activeView = 'earth';
+let targetProgress = 0;
+let currentProgress = 0;
+let lastComputedAnim = -1; // Cache tracker to prevent infinite CPU rendering
+
 lenis.on('scroll', (e) => {
   const h = window.innerHeight;
   let progress = e.scroll / h; 
   if (progress > 1) progress = 1;
   if (progress < 0) progress = 0;
+  targetProgress = progress;
   
-  // Transition Globe Camera: zoom in heavily as we scroll down
-  const baseAlt = 2.5; 
-  const targetAlt = 0.05; // Fly right onto the surface
-  const alt = baseAlt - (progress * (baseAlt - targetAlt));
-  
-  world.pointOfView({ altitude: alt });
-  
-  // Opacity fadeout: fade globe fast towards the end
-  const globeOp = 1 - Math.pow(progress, 3);
-  document.getElementById('globeViz').style.opacity = globeOp.toFixed(3);
-  
-  // Top nav active state sync
+  // Top nav active state sync immediately
   if(progress > 0.5 && activeView !== 'geo'){
     activeView = 'geo';
     document.querySelectorAll('.top-nav .tab').forEach(t=>t.classList.remove('active'));
@@ -194,6 +248,97 @@ lenis.on('scroll', (e) => {
     if(b) b.classList.add('active');
   }
 });
+
+// Decoupled Animation Loop for silky smooth unfolding
+function animateUnroll() {
+  if (Math.abs(targetProgress - currentProgress) > 0.001) {
+      // Much faster catch-up so it feels tightly bound to the mouse wheel
+      currentProgress += (targetProgress - currentProgress) * 0.35;
+  } else {
+      currentProgress = targetProgress;
+  }
+  
+  // Accelerate the visual unroll so it finishes by ~75% of the scroll down
+  let computedAnim = currentProgress * 1.35;
+  if (computedAnim > 1) computedAnim = 1;
+
+  const svgMap = document.getElementById('svg-map-container');
+  const globeCanvas = document.getElementById('globeViz');
+  
+  if (computedAnim > 0 && capturedCenterLng === 0) {
+      capturedCenterLng = world.pointOfView().lng || 0;
+      world.controls().autoRotate = false;
+  }
+  if (computedAnim <= 0) {
+      world.controls().autoRotate = true;
+      capturedCenterLng = 0; 
+  }
+  
+  // Removed altitude zooming so the globe remains perfectly static during the crossfade
+  // Optical illusion crossfade
+  const crossfadeRange = 0.25; // Blend over slightly more scroll for butter smoothness
+  let gOp = 1 - (computedAnim / crossfadeRange);
+  let sOp = computedAnim / (crossfadeRange * 0.5); 
+  
+  if (gOp < 0) gOp = 0;
+  if (sOp > 1) sOp = 1;
+  
+  if(globeCanvas && globeCanvas.style.opacity !== gOp.toFixed(3)) globeCanvas.style.opacity = gOp.toFixed(3);
+  if(svgMap && svgMap.style.opacity !== sOp.toFixed(3)) svgMap.style.opacity = sOp.toFixed(3);
+  
+  // Perform the intense recalculation ONLY if state changed!
+  if (computedAnim !== lastComputedAnim) {
+      if (computedAnim > 0 && pathNodes.length > 0) {
+         updateMapMorph(computedAnim);
+         
+         const oceanBg = document.getElementById('ocean-bg');
+         if (oceanBg) {
+            oceanBg.setAttribute('opacity', (1 - (computedAnim * 2)).toFixed(2));
+         }
+      }
+      
+      // Dynamic CSS hardware-accelerated DropShadow toggled only when completely flat
+      if (svgMap) {
+         if (computedAnim >= 1) {
+            svgMap.style.filter = 'drop-shadow(2px 5px 6px rgba(0,0,0,0.4))';
+         } else {
+            svgMap.style.filter = 'none';
+         }
+      }
+      lastComputedAnim = computedAnim;
+  }
+
+  // Auto-minimize the left filter panel based on scrolling down
+  const leftPanel = document.getElementById('left-filter-panel');
+  if (leftPanel) {
+    const minBtnNode = leftPanel.querySelector('.minimize-btn svg');
+    if (computedAnim > 0.1 && !leftPanel.classList.contains('minimized')) {
+       leftPanel.classList.add('minimized');
+       if(minBtnNode) minBtnNode.style.transform = 'rotate(180deg)';
+    } else if (computedAnim <= 0.02 && leftPanel.classList.contains('minimized')) {
+       leftPanel.classList.remove('minimized');
+       if(minBtnNode) minBtnNode.style.transform = 'rotate(0deg)';
+    }
+  }
+
+  // Smoothly remove bottom news line
+  const bottomPanel = document.getElementById('earth-footer');
+  if (bottomPanel) {
+     bottomPanel.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+     if (computedAnim > 0.05) {
+         bottomPanel.style.transform = 'translateY(100px)';
+         bottomPanel.style.opacity = '0';
+         bottomPanel.style.pointerEvents = 'none';
+     } else {
+         bottomPanel.style.transform = 'translateY(0px)';
+         bottomPanel.style.opacity = '1';
+         bottomPanel.style.pointerEvents = 'auto'; // allow clicking if there were links
+     }
+  }
+
+  requestAnimationFrame(animateUnroll);
+}
+requestAnimationFrame(animateUnroll);
 
 // Handle window resize for globe
 window.addEventListener('resize', () => {

@@ -653,6 +653,8 @@ ul {
 .views-container {
   position: relative;
   width: 100vw;
+  z-index: 10;
+  pointer-events: none;
 }
 
 .view-section {
@@ -660,7 +662,19 @@ ul {
   height: 100vh;
   position: relative;
   overflow: hidden;
+  pointer-events: none;
 }
+
+.main-content {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  padding: 2rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.left-panel, .right-panel, .bottom-panel { pointer-events: none; }
 
 /* Geo Layout */
 .geo-layout {
@@ -678,12 +692,13 @@ ul {
 }
 
 .geo-map-area {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 5;
+  pointer-events: none;
 }
 
 .geo-left-panel {
