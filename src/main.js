@@ -65,15 +65,16 @@ world
     </div>
   `);
 
+/* Align with flat map / getTensionColor() palette (#e05c5c / #e09a3c / #3a7d44) */
 const countryColors = {
-  'Oman': '#ef4444', 'Iran': '#ef4444', 'United Arab Emirates': '#ef4444',
-  'Germany': '#f59e0b', 'France': '#f59e0b',
-  'China': '#3b82f6', 'Philippines': '#3b82f6', 'Vietnam': '#3b82f6',
-  'United States of America': '#f59e0b',
-  'Ukraine': '#ef4444',
-  'Taiwan': '#f59e0b',
-  'Venezuela': '#3b82f6',
-  'Yemen': '#ef4444', 'Saudi Arabia': '#ef4444'
+  'Oman': '#e05c5c', 'Iran': '#e05c5c', 'United Arab Emirates': '#e05c5c',
+  'Germany': '#e09a3c', 'France': '#e09a3c',
+  'China': '#e09a3c', 'Philippines': '#e09a3c', 'Vietnam': '#e09a3c',
+  'United States of America': '#e09a3c',
+  'Ukraine': '#e05c5c',
+  'Taiwan': '#e09a3c',
+  'Venezuela': '#e09a3c',
+  'Yemen': '#e05c5c', 'Saudi Arabia': '#e05c5c'
 };
 let hoverD;
 let selectedRegion = 'all';
@@ -90,6 +91,16 @@ let capturedCenterLng = 0;
 let landingSelectedStock = null;
 let landingSidebarMode = 'list';
 let landingDetailTab = 'Overall';
+/** Until true, landing right panel shows sector overview instead of the stock list. */
+let landingSectorListUnlocked = false;
+
+const LANDING_DETAIL_TAB_IDS = {
+  Overall: 'panel-landing-overall',
+  Fundamental: 'panel-landing-fundamental',
+  Technical: 'panel-landing-technical',
+  News: 'panel-landing-news',
+  AI: 'panel-landing-ai',
+};
 
 const sectorStocks = {
   "Banking": [
@@ -365,6 +376,7 @@ function setSelectedRegion(region) {
 function setSelectedSector(sector) {
   selectedSector = sector;
   selectedStock = null;
+  landingSectorListUnlocked = true;
   landingSidebarMode = 'list';
   landingDetailTab = 'Overall';
   sidebarMode = 'list';
@@ -516,8 +528,8 @@ function renderDetailTabContent() {
 }
 
 function renderGeoRightPanel() {
-  const panel = document.querySelector('.geo-right-panel');
-  if (!panel) return;
+  const dynamic = document.getElementById('geo-right-panel-dynamic');
+  if (!dynamic) return;
   const countryCard = buildCountryCard();
   let html = countryCard;
   if (sidebarMode === 'list') {
@@ -567,7 +579,7 @@ function renderGeoRightPanel() {
   } else {
     html += `<div style="padding:24px 20px;color:#94a3b8;font-size:13px;">Select a stock to view detail information.</div>`;
   }
-  panel.innerHTML = html;
+  dynamic.innerHTML = html;
   if (sidebarMode === 'detail' && selectedStock) {
     renderSignalBars({ breakdown: selectedStock.breakdown });
     renderDetailTabContent();
@@ -602,7 +614,8 @@ function handleGeoRightPanelClick(event) {
 
 function applyGeoRightPanelDelegation() {
   const geoRightPanel = document.querySelector('.geo-right-panel');
-  if (!geoRightPanel) return;
+  if (!geoRightPanel || geoRightPanel.dataset.geoClickBound === '1') return;
+  geoRightPanel.dataset.geoClickBound = '1';
   geoRightPanel.addEventListener('click', handleGeoRightPanelClick);
 }
 
@@ -617,6 +630,18 @@ function ensureGeoRightPanel() {
   applyGeoRightPanelDelegation();
   updateSectorStyles();
   renderGeoRightPanel();
+  wireGeoMapChromeOnce();
+}
+
+function wireGeoMapChromeOnce() {
+  if (typeof window !== 'undefined' && window.__geoMapChromeWired) return;
+  if (typeof window !== 'undefined') window.__geoMapChromeWired = true;
+  const closeBtn = document.getElementById('close-geo-right');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      document.querySelector('.geo-right-panel')?.classList.add('hidden');
+    });
+  }
 }
 
 // ─── LANDING PAGE RIGHT SIDEBAR ───────────────────────────────────────────────
@@ -639,84 +664,142 @@ function buildLandingStockRow(stock) {
   `;
 }
 
-function buildLandingDetailTabContent() {
-  if (!landingSelectedStock) return '';
-  if (landingDetailTab === 'Overall') return '';
-  if (landingDetailTab === 'Fundamental') {
-    const f = landingSelectedStock.fundamental;
-    const colorFor = (value, type) => {
-      if (type === 'roe') return value >= 15 ? '#4ade80' : value >= 10 ? '#f59e0b' : '#f87171';
-      if (type === 'npa') return value <= 1.5 ? '#4ade80' : value <= 3 ? '#f59e0b' : '#f87171';
-      if (type === 'revenueGrowth') return value >= 0 ? '#4ade80' : '#f87171';
-      return '#ffffff';
+function computeSectorSnapshot(sectorKey) {
+  const stocks = sectorStocks[sectorKey];
+  if (!stocks || !stocks.length) {
+    return {
+      avgScore: 0,
+      topGainer: null,
+      topLoser: null,
+      sentiment: 'CONFLICTED',
     };
-    return `
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">P/E vs Sector</span>
-        <span style="color:#fff;font-size:13px;font-family:monospace;">${f.pe} <span style="color:#94a3b8;font-size:11px;">vs ${f.sectorPE}</span></span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">ROE</span>
-        <span style="color:${colorFor(f.roe,'roe')};font-size:13px;font-family:monospace;">${f.roe}%</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">NPA</span>
-        <span style="color:${colorFor(f.npa,'npa')};font-size:13px;font-family:monospace;">${f.npa}%</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Revenue Growth</span>
-        <span style="color:${colorFor(f.revenueGrowth,'revenueGrowth')};font-size:13px;font-family:monospace;">${f.revenueGrowth}%</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Promoter Holding</span>
-        <span style="color:#fff;font-size:13px;font-family:monospace;">${f.promoterHolding}%</span>
-      </div>
-    `;
   }
-  if (landingDetailTab === 'Technical') {
-    const t = landingSelectedStock.technical;
-    const rsiColor = t.rsi > 70 ? '#f87171' : t.rsi < 30 ? '#4ade80' : '#94a3b8';
-    const rsiTag = t.rsi > 70 ? 'Overbought' : t.rsi < 30 ? 'Oversold' : 'Neutral';
-    const macdColor = t.macd.toLowerCase().includes('bullish') ? '#4ade80' : t.macd.toLowerCase().includes('bearish') ? '#f87171' : '#94a3b8';
-    const volumeColor = t.volumeTrend === 'Increasing' ? '#4ade80' : t.volumeTrend === 'Decreasing' ? '#f87171' : '#94a3b8';
-    const priceColor = t.priceVsWMA >= 0 ? '#4ade80' : '#f87171';
-    return `
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">RSI 14</span>
-        <span style="color:${rsiColor};font-size:13px;font-family:monospace;">${t.rsi} (${rsiTag})</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Price vs 20d WMA</span>
-        <span style="color:${priceColor};font-size:13px;font-family:monospace;">${t.priceVsWMA >= 0 ? '+' : ''}${t.priceVsWMA}%</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">MACD</span>
-        <span style="color:${macdColor};font-size:13px;font-family:monospace;">${t.macd}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Volume Trend</span>
-        <span style="color:${volumeColor};font-size:13px;font-family:monospace;">${t.volumeTrend}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Support</span>
-        <span style="color:#fff;font-size:13px;font-family:monospace;">${t.support.toFixed(2)}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;">
-        <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Resistance</span>
-        <span style="color:#fff;font-size:13px;font-family:monospace;">${t.resistance.toFixed(2)}</span>
-      </div>
-    `;
+  const avgScore = stocks.reduce((a, s) => a + s.score, 0) / stocks.length;
+  const byScore = [...stocks].sort((a, b) => b.score - a.score);
+  const topGainer = byScore[0];
+  const topLoser = byScore[byScore.length - 1];
+  let sentiment = 'CONFLICTED';
+  if (avgScore > 0.12) sentiment = 'BULLISH';
+  else if (avgScore < -0.08) sentiment = 'BEARISH';
+  return { avgScore, topGainer, topLoser, sentiment };
+}
+
+function buildSectorOverviewHTML() {
+  if (!selectedSector) {
+    return `<div class="tab-content-container" style="min-height:120px;justify-content:center;"><p style="text-align:center;color:#aab4c8;font-size:13px;line-height:1.5;margin:0;">Select a sector on the left to load its snapshot and stock list.</p></div>`;
   }
-  if (landingDetailTab === 'News AI') {
-    return landingSelectedStock.news.map(item => `
-      <div style="padding:12px 0;border-bottom:1px solid #1e1e2e;">
-        <div style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:${item.sentiment==='POSITIVE'?'#14532d':item.sentiment==='NEGATIVE'?'#7f1d1d':'#334155'};color:${item.sentiment==='POSITIVE'?'#86efac':item.sentiment==='NEGATIVE'?'#fecaca':'#cbd5e1'};font-size:11px;font-family:monospace;font-weight:600;margin-bottom:6px;">${item.sentiment}</div>
-        <p style="margin:0 0 5px;color:#fff;font-size:13px;line-height:1.45;">${item.headline}</p>
-        <div style="color:#94a3b8;font-size:11px;">${item.source} · ${item.time}</div>
+  const snap = computeSectorSnapshot(selectedSector);
+  const badge = getBadgeStyles(snap.sentiment);
+  const gainerLine = snap.topGainer
+    ? `${snap.topGainer.name} (${snap.topGainer.score >= 0 ? '+' : ''}${snap.topGainer.score.toFixed(2)})`
+    : '—';
+  const loserLine = snap.topLoser
+    ? `${snap.topLoser.name} (${snap.topLoser.score >= 0 ? '+' : ''}${snap.topLoser.score.toFixed(2)})`
+    : '—';
+  const avgColor = getScoreColor(snap.avgScore);
+  return `
+    <div class="tab-content-container" style="gap:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;width:100%;">
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:11px;font-family:monospace;color:#aab4c8;text-transform:uppercase;letter-spacing:0.08em;">SECTOR OVERVIEW</div>
+          <div style="font-size:18px;color:#fff;font-weight:700;font-family:var(--font-display,system-ui);margin-top:8px;line-height:1.2;">${selectedSector}</div>
+        </div>
+        <div class="signal-tag" style="flex-shrink:0;background:${badge.background};color:${badge.color};border-color:${badge.color};">${snap.sentiment}</div>
       </div>
-    `).join('');
+      <div class="metric"><span>Avg fusion score</span><span style="font-family:monospace;font-weight:600;color:${avgColor};">${snap.avgScore >= 0 ? '+' : ''}${snap.avgScore.toFixed(2)}</span></div>
+      <div class="metric"><span>Top gainer</span><span style="font-size:13px;text-align:right;color:#4ade80;max-width:60%;">${gainerLine}</span></div>
+      <div class="metric"><span>Top loser</span><span style="font-size:13px;text-align:right;color:#f87171;max-width:60%;">${loserLine}</span></div>
+      <p style="font-size:12px;color:#aab4c8;line-height:1.5;margin:4px 0 0;">Click the same sector in the left panel to open the full stock list.</p>
+    </div>
+  `;
+}
+
+function buildLandingFundamentalPanel(stock) {
+  const f = stock.fundamental;
+  const colorFor = (value, type) => {
+    if (type === 'roe') return value >= 15 ? '#4ade80' : value >= 10 ? '#f59e0b' : '#f87171';
+    if (type === 'npa') return value <= 1.5 ? '#4ade80' : value <= 3 ? '#f59e0b' : '#f87171';
+    if (type === 'revenueGrowth') return value >= 0 ? '#4ade80' : '#f87171';
+    return '#ffffff';
+  };
+  return `
+    <div class="metric"><span>P/E ratio</span><span style="font-family:monospace;font-weight:600;">${f.pe} <span style="opacity:0.55;font-size:11px;">vs ${f.sectorPE}</span></span></div>
+    <div class="metric"><span>ROE</span><span style="font-family:monospace;font-weight:600;color:${colorFor(f.roe, 'roe')}">${f.roe}%</span></div>
+    <div class="metric"><span>NPA</span><span style="font-family:monospace;font-weight:600;color:${colorFor(f.npa, 'npa')}">${f.npa}%</span></div>
+    <div class="metric"><span>Revenue growth</span><span style="font-family:monospace;font-weight:600;color:${colorFor(f.revenueGrowth, 'revenueGrowth')}">${f.revenueGrowth}%</span></div>
+    <div class="metric"><span>Promoter holding</span><span style="font-family:monospace;font-weight:600;">${f.promoterHolding}%</span></div>
+  `;
+}
+
+function buildLandingTechnicalPanel(stock) {
+  const t = stock.technical;
+  const rsiColor = t.rsi > 70 ? '#f87171' : t.rsi < 30 ? '#4ade80' : '#aab4c8';
+  const rsiTag = t.rsi > 70 ? 'Overbought' : t.rsi < 30 ? 'Oversold' : 'Neutral';
+  const macdColor = t.macd.toLowerCase().includes('bullish') ? '#4ade80' : t.macd.toLowerCase().includes('bearish') ? '#f87171' : '#aab4c8';
+  const volumeColor = t.volumeTrend === 'Increasing' ? '#4ade80' : t.volumeTrend === 'Decreasing' ? '#f87171' : '#aab4c8';
+  const dmaColor = t.priceVsWMA >= 0 ? '#4ade80' : '#f87171';
+  const dmaLabel = t.priceVsWMA >= 0 ? `${t.priceVsWMA}% above` : `${Math.abs(t.priceVsWMA)}% below`;
+  return `
+    <div class="metric"><span>RSI (14)</span><span style="font-family:monospace;font-weight:600;color:${rsiColor};text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;">${t.rsi} · ${rsiTag}</span></div>
+    <div class="metric"><span>MACD signal</span><span style="font-family:monospace;font-weight:600;color:${macdColor};text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;">${t.macd}</span></div>
+    <div class="metric"><span>200DMA position</span><span style="font-family:monospace;font-weight:600;color:${dmaColor};text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;">${dmaLabel}</span></div>
+    <div class="metric"><span>Volume trend</span><span style="font-family:monospace;font-weight:600;color:${volumeColor};text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%;">${t.volumeTrend}</span></div>
+  `;
+}
+
+function buildLandingNewsPanel(stock) {
+  const items = (stock.news || []).slice(0, 3);
+  if (!items.length) {
+    return '<p style="color:#aab4c8;font-size:13px;line-height:1.5;margin:0;">No recent headlines for this name.</p>';
   }
-  return '';
+  return items.map(item => `
+    <div class="news-item" style="flex-direction:column;align-items:stretch;justify-content:flex-start;gap:8px;">
+      <div class="kw-tag" style="align-self:flex-start;padding:4px 8px;border-radius:999px;background:${item.sentiment === 'POSITIVE' ? '#14532d' : item.sentiment === 'NEGATIVE' ? '#7f1d1d' : '#334155'};color:${item.sentiment === 'POSITIVE' ? '#86efac' : item.sentiment === 'NEGATIVE' ? '#fecaca' : '#cbd5e1'};font-size:11px;font-family:monospace;">${item.sentiment}</div>
+      <p class="headline" style="margin:0;">${item.headline}</p>
+      <div class="news-meta" style="width:100%;justify-content:space-between;"><span>${item.source}</span><span>${item.time}</span></div>
+    </div>
+  `).join('');
+}
+
+function buildLandingAiPanel(stock) {
+  const { F, T, N, G } = stock.breakdown;
+  const label = (stock.label || '').toUpperCase();
+  let body = '';
+  if (label.includes('CONFLICTED') || label.includes('NEUTRAL')) {
+    body = `Fusion is pulling in different directions: fundamentals score ${F >= 0 ? '+' : ''}${F.toFixed(2)} and news ${N >= 0 ? '+' : ''}${N.toFixed(2)}, while technicals read ${T >= 0 ? '+' : ''}${T.toFixed(2)} and global risk ${G >= 0 ? '+' : ''}${G.toFixed(2)}. That mismatch usually means chop until one pillar clearly leads—size for two-way tape and watch whether global headlines or earnings revisions move first.`;
+  } else if (label.includes('BULLISH')) {
+    body = `The stack is mostly aligned with a constructive view: fundamentals ${F >= 0 ? '+' : ''}${F.toFixed(2)}, technicals ${T >= 0 ? '+' : ''}${T.toFixed(2)}, and news flow ${N >= 0 ? '+' : ''}${N.toFixed(2)} reinforce each other, with only global (${G >= 0 ? '+' : ''}${G.toFixed(2)}) acting as the main spoiler. Treat dips as noise unless global breaks worse—confirmation is when news and price action keep scoring together.`;
+  } else if (label.includes('BEARISH')) {
+    body = `Pressure is broad: fundamentals ${F >= 0 ? '+' : ''}${F.toFixed(2)}, tape ${T >= 0 ? '+' : ''}${T.toFixed(2)}, and headlines ${N >= 0 ? '+' : ''}${N.toFixed(2)} skew soft while global stress ${G >= 0 ? '+' : ''}${G.toFixed(2)} adds fuel. Bounces are likely fragile until at least one pillar stops deteriorating—use strength to reduce, not to chase.`;
+  } else {
+    body = `Blend of inputs: F ${F >= 0 ? '+' : ''}${F.toFixed(2)}, T ${T >= 0 ? '+' : ''}${T.toFixed(2)}, N ${N >= 0 ? '+' : ''}${N.toFixed(2)}, G ${G >= 0 ? '+' : ''}${G.toFixed(2)}. The model reads this as a nuanced setup—neither clean breakout nor clean breakdown—so confirmation from the next two sessions of price + news matters more than the point estimate alone.`;
+  }
+  return `<div class="ai-explainer" style="margin-top:0;"><p style="margin:0;font-size:13px;line-height:1.55;color:#e2e8f0;">${body}</p></div>`;
+}
+
+function buildLandingOverallPanel(stock) {
+  const bars = [
+    { label: 'Fundamental', value: stock.breakdown.F },
+    { label: 'Technical', value: stock.breakdown.T },
+    { label: 'News', value: stock.breakdown.N },
+    { label: 'Global', value: stock.breakdown.G },
+  ];
+  return `<div class="signal-bars">${bars.map(b => buildLandingSignalBarHTML(b.label, b.value)).join('')}</div>`;
+}
+
+function syncLandingDetailTabs() {
+  const root = document.getElementById('right-signal-panel');
+  if (!root) return;
+  root.querySelectorAll('[data-action="landing-detail-tab"]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === landingDetailTab);
+  });
+  Object.keys(LANDING_DETAIL_TAB_IDS).forEach(tab => {
+    const el = document.getElementById(LANDING_DETAIL_TAB_IDS[tab]);
+    if (!el) return;
+    const on = tab === landingDetailTab;
+    el.classList.toggle('active', on);
+    el.classList.toggle('hidden', !on);
+  });
 }
 
 function buildLandingSignalBarHTML(fullLabel, value) {
@@ -746,21 +829,26 @@ function buildLandingSignalBarHTML(fullLabel, value) {
 
 function renderLandingRightPanel() {
   const panelWrap = document.querySelector('#right-signal-panel .panel-content-wrap');
-  if (!panelWrap) return;
+  if (!panelWrap) {
+    console.warn('landing panel not found');
+    return;
+  }
 
   let html = '';
 
   if (landingSidebarMode === 'list') {
-    if (!selectedSector) {
-      html = `<div style="padding:40px 20px;text-align:center;color:#94a3b8;font-size:13px;">Select a sector to see top stocks</div>`;
+    if (!landingSectorListUnlocked) {
+      html = buildSectorOverviewHTML();
+    } else if (!selectedSector) {
+      html = `<div class="tab-content-container" style="min-height:120px;justify-content:center;"><p style="text-align:center;color:#aab4c8;font-size:13px;margin:0;">Select a sector to see top stocks.</p></div>`;
     } else {
       const stocks = sectorStocks[selectedSector] || [];
       html = `
-        <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1e1e2e;">
-          <div style="font-size:11px;font-family:monospace;color:#94a3b8;text-transform:uppercase;letter-spacing:0.12em;">TOP STOCKS</div>
-          <div style="font-size:15px;color:#fff;font-family:monospace;margin-top:6px;font-weight:600;">${selectedSector}</div>
+        <div class="tab-content-container" style="gap:0;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:12px;">
+          <div style="font-size:11px;font-family:monospace;color:#aab4c8;text-transform:uppercase;letter-spacing:0.08em;">TOP STOCKS</div>
+          <div style="font-size:16px;color:#fff;font-family:monospace;margin-top:8px;font-weight:600;line-height:1.2;">${selectedSector}</div>
         </div>
-        <div>${stocks.map(buildLandingStockRow).join('')}</div>
+        <div class="tab-content-container" style="gap:0;min-height:0;">${stocks.map(buildLandingStockRow).join('')}</div>
       `;
     }
   } else if (landingSidebarMode === 'detail' && landingSelectedStock) {
@@ -769,26 +857,25 @@ function renderLandingRightPanel() {
     const scoreColor = getScoreColor(stock.score);
     const scoreFill = Math.min(50, Math.abs(stock.score) * 50);
     const scoreLeft = stock.score >= 0 ? 50 : 50 - scoreFill;
-    const tabs = ['Overall','Fundamental','Technical','News AI'];
+    const tabs = ['Overall', 'Fundamental', 'Technical', 'News', 'AI'];
     const tabButtons = tabs.map(tab => `
-      <button data-action="landing-detail-tab" data-tab="${tab}"
-        style="flex:1;padding:8px 0;border:none;background:none;color:${landingDetailTab===tab?'#fff':'#94a3b8'};border-bottom:2px solid ${landingDetailTab===tab?'#4ade80':'transparent'};font-family:monospace;font-size:11px;cursor:pointer;transition:all 0.2s;">${tab}</button>
+      <button type="button" class="sub-tab${landingDetailTab === tab ? ' active' : ''}" data-action="landing-detail-tab" data-tab="${tab}">${tab}</button>
     `).join('');
-    const signalBars = [
-      { label: 'Fundamental', value: stock.breakdown.F },
-      { label: 'Technical',   value: stock.breakdown.T },
-      { label: 'News',        value: stock.breakdown.N },
-      { label: 'Global',      value: stock.breakdown.G },
-    ].map(b => buildLandingSignalBarHTML(b.label, b.value)).join('');
+
+    const overallBody = buildLandingOverallPanel(stock);
+    const fundBody = buildLandingFundamentalPanel(stock);
+    const techBody = buildLandingTechnicalPanel(stock);
+    const newsBody = buildLandingNewsPanel(stock);
+    const aiBody = buildLandingAiPanel(stock);
 
     html = `
-      <div style="padding-bottom:12px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <button data-action="landing-back" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0;">←</button>
-        <div style="flex:1;color:#fff;font-size:15px;font-weight:700;font-family:monospace;">${stock.name}</div>
-        <div style="padding:3px 8px;border-radius:999px;background:${badge.background};color:${badge.color};font-size:11px;white-space:nowrap;">${stock.label}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.08);width:100%;min-width:0;">
+        <button type="button" data-action="landing-back" style="background:none;border:none;color:#aab4c8;font-size:18px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;">←</button>
+        <div style="flex:1;min-width:0;text-align:center;color:#fff;font-size:15px;font-weight:700;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${stock.name}</div>
+        <div style="padding:4px 8px;border-radius:999px;background:${badge.background};color:${badge.color};font-size:10px;white-space:nowrap;flex-shrink:1;max-width:110px;overflow:hidden;text-overflow:ellipsis;border:1px solid ${badge.color};">${stock.label}</div>
       </div>
-      <div style="margin-top:14px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;font-family:monospace;margin-bottom:6px;">
+      <div style="margin-top:16px;width:100%;min-width:0;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#aab4c8;font-family:monospace;margin-bottom:8px;">
           <span>FUSION SCORE</span>
           <span style="color:${scoreColor};font-weight:600;">${stock.score >= 0 ? '+' : ''}${stock.score.toFixed(2)}</span>
         </div>
@@ -797,24 +884,31 @@ function renderLandingRightPanel() {
           <div style="position:absolute;top:0;height:100%;width:${scoreFill}%;left:${scoreLeft}%;background:${scoreColor};border-radius:999px;transition:all 0.4s ease;"></div>
         </div>
       </div>
-      <div style="height:1px;background:#1e1e2e;margin:14px 0;"></div>
-      <div style="margin-bottom:14px;">${signalBars}</div>
-      <div style="display:flex;gap:4px;border-bottom:1px solid #1e1e2e;margin-bottom:14px;">${tabButtons}</div>
-      <div id="landing-detail-tab-content">${landingDetailTab === 'Overall' ? '' : buildLandingDetailTabContent()}</div>
+      <div style="height:1px;background:rgba(255,255,255,0.08);margin:8px 0;"></div>
+      <div class="analysis-tabs" style="margin-top:0;margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto;">${tabButtons}</div>
+      <div class="tab-content-container" id="landing-detail-tab-root" style="min-height:120px;">
+        <div id="panel-landing-overall" class="sub-panel${landingDetailTab === 'Overall' ? ' active' : ''}${landingDetailTab === 'Overall' ? '' : ' hidden'}">${overallBody}</div>
+        <div id="panel-landing-fundamental" class="sub-panel${landingDetailTab === 'Fundamental' ? ' active' : ''}${landingDetailTab === 'Fundamental' ? '' : ' hidden'}">${fundBody}</div>
+        <div id="panel-landing-technical" class="sub-panel${landingDetailTab === 'Technical' ? ' active' : ''}${landingDetailTab === 'Technical' ? '' : ' hidden'}">${techBody}</div>
+        <div id="panel-landing-news" class="sub-panel${landingDetailTab === 'News' ? ' active' : ''}${landingDetailTab === 'News' ? '' : ' hidden'}">${newsBody}</div>
+        <div id="panel-landing-ai" class="sub-panel${landingDetailTab === 'AI' ? ' active' : ''}${landingDetailTab === 'AI' ? '' : ' hidden'}">${aiBody}</div>
+      </div>
     `;
+  } else {
+    html = buildSectorOverviewHTML();
   }
 
-  // Preserve the original static parts (card-header, score-breakdown, analysis-tabs, ai-explainer)
-  // by only injecting content into a dedicated sub-container
   let landingDynamic = document.getElementById('landing-dynamic-content');
   if (!landingDynamic) {
-    // Create it once, above the existing static card
     landingDynamic = document.createElement('div');
     landingDynamic.id = 'landing-dynamic-content';
-    landingDynamic.style.cssText = 'border-bottom:1px solid #1e1e2e;padding-bottom:14px;margin-bottom:14px;';
     panelWrap.insertBefore(landingDynamic, panelWrap.firstChild);
   }
+  landingDynamic.style.cssText = 'width:100%;min-width:0;display:flex;flex-direction:column;align-items:stretch;gap:0;';
   landingDynamic.innerHTML = html;
+  if (landingSidebarMode === 'detail' && landingSelectedStock) {
+    syncLandingDetailTabs();
+  }
 }
 
 function handleLandingRightPanelClick(event) {
@@ -838,7 +932,7 @@ function handleLandingRightPanelClick(event) {
   const tabBtn = event.target.closest('[data-action="landing-detail-tab"]');
   if (tabBtn) {
     landingDetailTab = tabBtn.dataset.tab;
-    renderLandingRightPanel();
+    syncLandingDetailTabs();
     return;
   }
 }
@@ -984,12 +1078,14 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
         const entry = getTensionByName(name);
         const iso = getCountryISO(d);
         const isSelected = selectedCountry && selectedCountry.name === name;
-        if (d === hoverD) return entry ? getTensionColor(entry.score) + 'aa' : 'rgba(34, 197, 94, 0.4)';
-        if (isSelected) return entry ? getTensionColor(entry.score) + 'cc' : 'rgba(34, 197, 94, 0.25)';
+        if (d === hoverD) return entry ? getTensionColor(entry.score) + 'aa' : 'rgba(58, 125, 68, 0.42)';
+        if (isSelected) return entry ? getTensionColor(entry.score) + 'cc' : 'rgba(58, 125, 68, 0.28)';
         // Sector-based highlighting
         if (selectedSector && sectorCountryMap[selectedSector]) {
           const relevantIsos = sectorCountryMap[selectedSector];
-          if (iso && relevantIsos.includes(iso)) return '#4ade80';
+          if (iso && relevantIsos.includes(iso)) {
+            return entry ? getTensionColor(entry.score) + 'cc' : 'rgba(58, 125, 68, 0.52)';
+          }
           return 'rgba(255,255,255,0.02)';
         }
         return entry ? getTensionColor(entry.score) + '44' : 'rgba(255,255,255,0.03)';
@@ -1234,11 +1330,6 @@ if (rightSignalPanel && rightMinBtn) {
   });
 }
 
-// Keep right panel content visible and aligned when in fullscreen or small layout
-if (rightSignalPanel) {
-  rightSignalPanel.style.minWidth = '320px';
-}
-
 // Tabs logic for Signal Card
 const subTabs = document.querySelectorAll('.sub-tab');
 subTabs.forEach(tab => {
@@ -1435,47 +1526,6 @@ stockItems.forEach(item => {
   });
 });
 
-renderFusionSidebar('HDFCBANK');
-ensureGeoRightPanel();
-
-// Wire landing right panel click delegation
-const landingRightPanelEl = document.getElementById('right-signal-panel');
-if (landingRightPanelEl) {
-  landingRightPanelEl.addEventListener('click', handleLandingRightPanelClick);
-}
-// Initial render for landing page right sidebar
-renderLandingRightPanel();
-
-const assetCards = document.querySelectorAll('.asset-card');
-const activeAssetTitle = document.getElementById('active-asset-title');
-const activeAssetIndicator = document.getElementById('active-asset-indicator');
-const assetData = {
-  RUB: { indicator: '▲ 0.00%', color: 'green', pair: '/ USD' },
-  OIL: { indicator: '▼ -0.88%', color: 'red', pair: '/ USD' },
-  GOLD: { indicator: '▲ 1.51%', color: 'green', pair: '/ USD' },
-  GAS: { indicator: '▼ -1.47%', color: 'red', pair: '/ USD' }
-};
-
-assetCards.forEach(card => {
-  card.addEventListener('click', () => {
-    assetCards.forEach(c => c.classList.remove('active'));
-    card.classList.add('active');
-
-    const asset = card.dataset.asset;
-    const assetInfo = assetData[asset] || { indicator: '—', color: 'green', pair: '/ USD' };
-    if (activeAssetTitle) {
-      activeAssetTitle.innerText = `${asset} ${assetInfo.pair}`;
-    }
-    if (activeAssetIndicator) {
-      activeAssetIndicator.innerText = assetInfo.indicator;
-      activeAssetIndicator.classList.toggle('green', assetInfo.color === 'green');
-      activeAssetIndicator.classList.toggle('red', assetInfo.color === 'red');
-    }
-
-    gsap.from('.chart-header', { opacity: 0.5, y: 8, duration: 0.25, ease: 'power1.out' });
-  });
-});
-
 // Ticker continuous scroll animation with GSAP
 gsap.to('.ticker-content', {
   xPercent: -50,
@@ -1506,72 +1556,134 @@ mainTabs.forEach(tab => {
   });
 });
 
-// Geo Map specific scripts
-function generateChartData() {
-  const canvas = document.getElementById('commodity-chart');
-  if(!canvas) return;
+/* === GEO MAP CHART === */
+const assetBaseData = {
+  RUB: { base: 0.011, pct: '+0.00%', pair: '/ USD', color: 'green' },
+  OIL: { base: 83.1, pct: '-0.88%', pair: '/ USOIL', color: 'red' },
+  GOLD: { base: 2282.2, pct: '+1.51%', pair: '/ XAU', color: 'green' },
+  GAS: { base: 3.19, pct: '-1.47%', pair: '/ NG', color: 'red' },
+};
+
+function generateCandles(basePrice, count = 60) {
+  const candles = [];
+  let price = basePrice;
+  const now = Date.now();
+  for (let i = count; i >= 0; i--) {
+    const open = price;
+    const change = (Math.random() - 0.49) * basePrice * 0.012;
+    const close = Math.max(open + change, basePrice * 0.85);
+    const high = Math.max(open, close) + Math.random() * basePrice * 0.005;
+    const low = Math.min(open, close) - Math.random() * basePrice * 0.005;
+    candles.push({ open, high, low, close, time: now - i * 3600000 });
+    price = close;
+  }
+  return candles;
+}
+
+function drawCandlestickChart(canvasId, candles) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  
-  const isUp = Math.random() > 0.5;
-  const color = isUp ? '#22c55e' : '#ef4444';
-  
-  // Generate random walk
-  let val = h / 2;
-  const points = [];
-  for(let x=0; x<=w; x+=10) {
-    val += (Math.random() - 0.5) * 30;
-    if(val < 20) val = 20;
-    if(val > h-20) val = h-20;
-    points.push([x, val]);
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const padding = { top: 10, bottom: 10, left: 8, right: 8 };
+  const chartW = W - padding.left - padding.right;
+  const chartH = H - padding.top - padding.bottom;
+
+  const prices = candles.flatMap((c) => [c.high, c.low]);
+  const minP = Math.min(...prices);
+  const maxP = Math.max(...prices);
+  const priceRange = maxP - minP || 1;
+
+  const toY = (p) => padding.top + chartH - ((p - minP) / priceRange) * chartH;
+  const candleW = Math.max(2, Math.floor(chartW / candles.length) - 1);
+  const gap = Math.floor(chartW / candles.length);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(W - padding.right, y);
+    ctx.stroke();
   }
-  
+
+  candles.forEach((c, i) => {
+    const x = padding.left + i * gap + gap / 2;
+    const isUp = c.close >= c.open;
+    const color = isUp ? '#22c55e' : '#ef4444';
+    const openY = toY(c.open);
+    const closeY = toY(c.close);
+    const highY = toY(c.high);
+    const lowY = toY(c.low);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, highY);
+    ctx.lineTo(x, lowY);
+    ctx.stroke();
+
+    const bodyTop = Math.min(openY, closeY);
+    const bodyH = Math.max(1, Math.abs(closeY - openY));
+    ctx.fillStyle = color;
+    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+  });
+
+  const lastClose = candles[candles.length - 1].close;
+  const lineY = toY(lastClose);
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 0.8;
   ctx.beginPath();
-  ctx.moveTo(points[0][0], points[0][1]);
-  for(let i=1; i<points.length; i++) {
-    ctx.lineTo(points[i][0], points[i][1]);
-  }
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
+  ctx.moveTo(padding.left, lineY);
+  ctx.lineTo(W - padding.right, lineY);
   ctx.stroke();
-  
-  // Fill gradient
-  ctx.lineTo(w, h);
-  ctx.lineTo(0, h);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0, color + '66'); // alpha
-  grad.addColorStop(1, color + '00');
-  ctx.fillStyle = grad;
-  ctx.fill();
-  
-  // update header
-  const pct = (Math.random()*4).toFixed(2);
-  const ind = document.getElementById('active-asset-indicator');
-  if (ind) {
-     ind.innerText = (isUp?'▲ ':'▼ ') + pct + '%';
-     ind.className = 'c-indicator ' + (isUp?'green':'red');
+  ctx.setLineDash([]);
+
+  return candles;
+}
+
+function updateOHLC(candles) {
+  if (!candles || !candles.length) return;
+  const last = candles[candles.length - 1];
+  const ohlcOpen = document.getElementById('ohlc-open');
+  const ohlcHigh = document.getElementById('ohlc-high');
+  const ohlcLow = document.getElementById('ohlc-low');
+  const ohlcClose = document.getElementById('ohlc-close');
+  const fmt = (v) => (v < 1 ? v.toFixed(4) : v.toFixed(2));
+  if (ohlcOpen) ohlcOpen.textContent = fmt(candles[0].open);
+  if (ohlcHigh) ohlcHigh.textContent = fmt(Math.max(...candles.map((c) => c.high)));
+  if (ohlcLow) ohlcLow.textContent = fmt(Math.min(...candles.map((c) => c.low)));
+  if (ohlcClose) ohlcClose.textContent = fmt(last.close);
+}
+
+function loadAssetChart(asset) {
+  const data = assetBaseData[asset] || assetBaseData.OIL;
+  const candles = generateCandles(data.base);
+  drawCandlestickChart('commodity-chart', candles);
+  updateOHLC(candles);
+
+  const titleEl = document.getElementById('active-asset-title');
+  const indEl = document.getElementById('active-asset-indicator');
+  if (titleEl) titleEl.innerHTML = `${asset} <span style="opacity:0.4;font-size:10px;">${data.pair}</span>`;
+  if (indEl) {
+    indEl.textContent = data.pct;
+    indEl.className = 'c-indicator ' + data.color;
   }
 }
 
-// Initial draw
-setTimeout(generateChartData, 1000);
-
-// Asset tabs logic
-document.querySelectorAll('.asset-card').forEach(card => {
-  card.addEventListener('click', () => {
-     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('active'));
-     card.classList.add('active');
-     
-     const title = document.getElementById('active-asset-title');
-     if (title) {
-        title.innerHTML = card.dataset.asset + ` <span style="opacity:0.4; font-size:10px;">/ USD</span>`;
-     }
-     generateChartData();
-  });
-});
+function generateChartData() {
+  const active = document.querySelector('.geo-right-panel .asset-card.active');
+  const asset = active?.dataset?.asset || 'OIL';
+  const data = assetBaseData[asset] || assetBaseData.OIL;
+  const candles = generateCandles(data.base);
+  drawCandlestickChart('commodity-chart', candles);
+  updateOHLC(candles);
+}
 
 // GTI Sparkline
 const sparkCanvas = document.getElementById('gti-sparkline');
@@ -1649,5 +1761,39 @@ document.querySelectorAll('.region-btn').forEach(btn => {
   });
 });
 updateRegionButtons();
+
+function finalizeAppInitialization() {
+  renderLandingRightPanel();
+  renderFusionSidebar('HDFCBANK');
+  ensureGeoRightPanel();
+
+  const landingRightPanelEl = document.getElementById('right-signal-panel');
+  if (landingRightPanelEl && landingRightPanelEl.dataset.landingClickBound !== '1') {
+    landingRightPanelEl.dataset.landingClickBound = '1';
+    landingRightPanelEl.addEventListener('click', handleLandingRightPanelClick);
+  }
+
+  document.querySelectorAll('.asset-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.asset-card').forEach((c) => c.classList.remove('active'));
+      card.classList.add('active');
+      const asset = card.dataset.asset;
+      loadAssetChart(asset);
+      gsap.from('.chart-header', { opacity: 0.5, y: 8, duration: 0.25 });
+    });
+  });
+
+  setTimeout(() => {
+    document.querySelectorAll('.asset-card').forEach((c) => c.classList.remove('active'));
+    document.querySelector('.asset-card[data-asset="OIL"]')?.classList.add('active');
+    loadAssetChart('OIL');
+  }, 300);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', finalizeAppInitialization);
+} else {
+  finalizeAppInitialization();
+}
 
 
