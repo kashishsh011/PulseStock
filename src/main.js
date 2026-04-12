@@ -1,3 +1,4 @@
+
 import './style.css'
 import Globe from 'globe.gl'
 import gsap from 'gsap'
@@ -79,17 +80,150 @@ let hoverD;
 let selectedRegion = 'all';
 let selectedSector = 'Banking';
 let selectedStock = null;
-let selectedCountry = null;
+let selectedCountry = getTensionByName('Russia') || null;
 let sidebarMode = 'list';
 let detailTab = 'Overall';
 let countriesGeo = [];
 let globeFeatures = [];
 let pathNodes = [];
 let capturedCenterLng = 0;
+let selectedGeoAsset = 'OIL';
+const GEO_MAP_VIEWBOX = { width: 1000, height: 650 };
+const geoChartLabels = [
+  '06:41', '', '', '', '', '',
+  '12:41', '', '', '', '', '',
+  '18:41', '', '', '', '', '',
+  '11', '', '', '', '06:41', ''
+];
+const geoMapState = {
+  scale: 1.28,
+  x: -126,
+  y: -46,
+  isDragging: false,
+  startClientX: 0,
+  startClientY: 0,
+  originX: 0,
+  originY: 0,
+  suppressClick: false,
+  hasMoved: false
+};
 // Landing page sidebar state (separate from geo map sidebar)
 let landingSelectedStock = null;
 let landingSidebarMode = 'list';
 let landingDetailTab = 'Overall';
+
+function buildGeoCandles(startOpen, closeSeries, labels = geoChartLabels) {
+  let previousClose = startOpen;
+  return closeSeries.map((close, index) => {
+    const open = index === 0 ? startOpen : previousClose;
+    const wickBase = Math.max(Math.abs(close) * 0.0012, Math.abs(close - open) * 0.55, 0.03);
+    const high = Math.max(open, close) + wickBase * (1 + (index % 3) * 0.16);
+    const low = Math.min(open, close) - wickBase * (0.9 + (index % 4) * 0.12);
+    previousClose = close;
+    return {
+      label: labels[index] || '',
+      open,
+      high,
+      low,
+      close,
+    };
+  });
+}
+
+function createGeoAsset(config) {
+  const candles = buildGeoCandles(config.startOpen, config.closes);
+  const stats = {
+    open: candles[0]?.open ?? config.startOpen,
+    high: Math.max(...candles.map(candle => candle.high)),
+    low: Math.min(...candles.map(candle => candle.low)),
+    close: candles[candles.length - 1]?.close ?? config.startOpen,
+  };
+
+  return {
+    ...config,
+    candles,
+    stats,
+    displayPrice: stats.close.toFixed(config.digits ?? 2),
+    displayChange: `${config.change >= 0 ? '+' : '-'}${Math.abs(config.change).toFixed(2)}%`,
+    directionClass: config.change >= 0 ? 'positive' : 'negative',
+  };
+}
+
+const geoAssets = {
+  RUB: createGeoAsset({
+    key: 'RUB',
+    symbol: 'USD/RUB',
+    startOpen: 91.84,
+    closes: [91.92, 91.88, 91.73, 91.67, 91.58, 91.71, 91.96, 91.84, 91.68, 91.74, 91.93, 92.08, 92.15, 92.11, 92.04, 92.18, 92.31, 92.27, 92.2, 92.24, 92.36, 92.42, 92.47, 92.58],
+    change: 0.82,
+    digits: 2,
+    context: 'FX stress monitor',
+    insight: 'Ruble pricing stays bid while energy corridors remain noisy and capital-flow expectations stay defensive.',
+    exposures: [
+      { label: 'Energy', value: 71 },
+      { label: 'Rates', value: 44 },
+      { label: 'Defense', value: 38 },
+    ],
+  }),
+  OIL: createGeoAsset({
+    key: 'OIL',
+    symbol: 'USOIL',
+    startOpen: 82.16,
+    closes: [82.08, 81.96, 81.62, 81.44, 81.34, 81.78, 82.19, 81.41, 80.92, 81.36, 82.36, 82.82, 82.58, 82.11, 82.93, 83.74, 83.48, 82.86, 83.27, 83.94, 84.02, 84.88, 85.64, 85.15],
+    change: -0.16,
+    digits: 2,
+    context: 'Energy supply route pricing',
+    insight: 'Shipping disruption risk keeps crude elevated, while intraday selling appears only when liquidity returns through Europe.',
+    exposures: [
+      { label: 'Energy', value: 64 },
+      { label: 'Defense', value: 24 },
+      { label: 'Logistics', value: 18 },
+    ],
+  }),
+  GOLD: createGeoAsset({
+    key: 'GOLD',
+    symbol: 'XAUUSD',
+    startOpen: 2291.4,
+    closes: [2294.1, 2296.8, 2293.4, 2298.2, 2301.5, 2299.6, 2304.8, 2308.6, 2311.9, 2307.5, 2302.8, 2305.4, 2312.2, 2315.9, 2314.1, 2318.7, 2321.3, 2317.8, 2324.2, 2328.9, 2331.2, 2327.4, 2324.1, 2322.6],
+    change: 1.5,
+    digits: 1,
+    context: 'Safe-haven accumulation',
+    insight: 'Gold remains the cleanest hedge when geopolitical impulse is outrunning central-bank communication clarity.',
+    exposures: [
+      { label: 'Metals', value: 58 },
+      { label: 'FX', value: 31 },
+      { label: 'Defense', value: 22 },
+    ],
+  }),
+  GAS: createGeoAsset({
+    key: 'GAS',
+    symbol: 'NATGAS',
+    startOpen: 3.11,
+    closes: [3.08, 3.06, 3.03, 3.01, 3.05, 3.09, 3.12, 3.07, 3.01, 3.04, 3.08, 3.15, 3.11, 3.06, 3.1, 3.18, 3.2, 3.17, 3.16, 3.22, 3.25, 3.28, 3.24, 3.23],
+    change: 1.02,
+    digits: 3,
+    context: 'Pipeline sensitivity gauge',
+    insight: 'Natural gas stays jumpy because even modest route headlines still reprice European inventory expectations quickly.',
+    exposures: [
+      { label: 'Utilities', value: 52 },
+      { label: 'Energy', value: 49 },
+      { label: 'Chemicals', value: 17 },
+    ],
+  }),
+};
+
+const geoCountryAssetMap = {
+  Russia: 'RUB',
+  Iran: 'OIL',
+  Israel: 'GOLD',
+  'Saudi Arabia': 'OIL',
+  China: 'GAS',
+  Pakistan: 'GAS',
+  'United States': 'OIL',
+  Ukraine: 'GOLD',
+  UAE: 'OIL',
+  Indonesia: 'GAS',
+};
 
 const sectorStocks = {
   "Banking": [
@@ -322,6 +456,40 @@ function getScoreColor(score) {
   return score >= 0 ? '#4ade80' : '#f87171';
 }
 
+function normalizeCountryName(name) {
+  return (name || '').trim().toLowerCase();
+}
+
+function getGeoAsset(assetKey = selectedGeoAsset) {
+  return geoAssets[assetKey] || geoAssets.OIL;
+}
+
+function getGeoAssetKeyForCountry(country) {
+  if (!country) return selectedGeoAsset;
+  const directMatch = geoCountryAssetMap[country.name];
+  if (directMatch) return directMatch;
+
+  const commodityAssetMap = {
+    CRUDE: 'OIL',
+    GAS: 'GAS',
+    GOLD: 'GOLD',
+  };
+
+  const commodityMatch = (country.commodities || [])
+    .map(commodity => commodityAssetMap[commodity])
+    .find(Boolean);
+
+  return commodityMatch || selectedGeoAsset;
+}
+
+function formatGeoNumber(value, digits = 2) {
+  return Number(value).toFixed(digits);
+}
+
+function getCountryFocusColor(country) {
+  return getTensionColor(country?.score ?? 35);
+}
+
 function updateRegionButtons() {
   document.querySelectorAll('.region-btn').forEach(btn => {
     const active = btn.dataset.region === selectedRegion;
@@ -392,7 +560,9 @@ function setLandingStock(stock) {
 
 function setSelectedCountry(country) {
   selectedCountry = country;
+  selectedGeoAsset = getGeoAssetKeyForCountry(country);
   renderGeoRightPanel();
+  syncFlatMapSelection();
   if (world) world.polygonCapColor(world.polygonCapColor());
 }
 
@@ -621,6 +791,283 @@ function ensureGeoRightPanel() {
 
 // ─── LANDING PAGE RIGHT SIDEBAR ───────────────────────────────────────────────
 
+function resetGeoMapViewport() {
+  geoMapState.x = -126;
+  geoMapState.y = -46;
+  applyGeoMapViewportTransform();
+}
+
+function renderGeoCandlestickChart(asset = getGeoAsset()) {
+  const canvas = document.getElementById('commodity-chart');
+  if (!canvas) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(320, Math.floor(rect.width || 640));
+  const height = Math.max(240, Math.floor(rect.height || 340));
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const padding = { top: 14, right: 52, bottom: 34, left: 10 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const candles = asset.candles;
+  const highs = candles.map(candle => candle.high);
+  const lows = candles.map(candle => candle.low);
+  const maxPrice = Math.max(...highs);
+  const minPrice = Math.min(...lows);
+  const priceRange = maxPrice - minPrice || 1;
+  const paddedHigh = maxPrice + priceRange * 0.08;
+  const paddedLow = minPrice - priceRange * 0.08;
+  const paddedRange = paddedHigh - paddedLow || 1;
+  const lineColor = asset.directionClass === 'positive' ? '#34d399' : '#ff6876';
+  const gridColor = 'rgba(122, 139, 176, 0.16)';
+
+  const priceToY = price => {
+    const ratio = (price - paddedLow) / paddedRange;
+    return padding.top + plotHeight - (ratio * plotHeight);
+  };
+
+  ctx.fillStyle = '#0b1020';
+  ctx.fillRect(0, 0, width, height);
+
+  for (let index = 0; index <= 4; index += 1) {
+    const y = padding.top + (plotHeight / 4) * index;
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right + 8, y);
+    ctx.stroke();
+
+    const price = paddedHigh - (paddedRange / 4) * index;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.72)';
+    ctx.font = '12px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(formatGeoNumber(price, asset.digits ?? 2), width - 6, y + 4);
+  }
+
+  candles.forEach((candle, index) => {
+    const step = plotWidth / candles.length;
+    const x = padding.left + step * index + step / 2;
+
+    if (candle.label) {
+      ctx.strokeStyle = 'rgba(122, 139, 176, 0.1)';
+      ctx.beginPath();
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, padding.top + plotHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.72)';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(candle.label, x, height - 10);
+    }
+  });
+
+  candles.forEach((candle, index) => {
+    const step = plotWidth / candles.length;
+    const bodyWidth = Math.max(6, step * 0.56);
+    const x = padding.left + step * index + step / 2;
+    const openY = priceToY(candle.open);
+    const closeY = priceToY(candle.close);
+    const highY = priceToY(candle.high);
+    const lowY = priceToY(candle.low);
+    const candleColor = candle.close >= candle.open ? '#2dd36f' : '#ff525f';
+    const bodyTop = Math.min(openY, closeY);
+    const bodyHeight = Math.max(2, Math.abs(closeY - openY));
+
+    ctx.strokeStyle = candleColor;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, highY);
+    ctx.lineTo(x, lowY);
+    ctx.stroke();
+
+    ctx.fillStyle = candleColor;
+    ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
+  });
+
+  const lastClose = asset.stats.close;
+  const lastY = priceToY(lastClose);
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding.left, lastY);
+  ctx.lineTo(width - padding.right + 10, lastY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const labelText = formatGeoNumber(lastClose, asset.digits ?? 2);
+  ctx.font = '12px Inter, sans-serif';
+  const labelWidth = ctx.measureText(labelText).width + 16;
+  ctx.fillStyle = lineColor;
+  ctx.fillRect(width - labelWidth - 6, lastY - 11, labelWidth, 22);
+  ctx.fillStyle = '#f8fafc';
+  ctx.textAlign = 'center';
+  ctx.fillText(labelText, width - labelWidth / 2 - 6, lastY + 4);
+}
+
+function renderGeoRightPanelLegacy() {
+  const panel = document.querySelector('.geo-right-panel');
+  if (!panel) return;
+
+  const asset = getGeoAsset();
+  const country = selectedCountry || {
+    name: 'Global Focus',
+    region: 'Cross-border regime',
+    score: 52,
+    commodities: ['MACRO'],
+  };
+  const countryColor = getCountryFocusColor(country);
+  const statDigits = asset.digits ?? 2;
+  const commodityTags = (country.commodities?.length ? country.commodities : ['CROSS-ASSET'])
+    .slice(0, 4)
+    .map(commodity => `<span class="geo-country-tag">${commodity}</span>`)
+    .join('');
+  const exposureRows = asset.exposures.map(exposure => `
+    <div class="geo-exposure-row">
+      <span class="geo-exposure-label">${exposure.label}</span>
+      <div class="geo-exposure-bar">
+        <div class="geo-exposure-fill" style="width:${exposure.value}%"></div>
+      </div>
+      <span class="geo-exposure-value">${exposure.value}%</span>
+    </div>
+  `).join('');
+
+  panel.innerHTML = `
+    <div class="geo-panel-shell">
+      <div class="geo-panel-topline">
+        <div class="geo-panel-title">
+          <span class="geo-panel-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M4 6h16M4 12h16M4 18h16"></path>
+              <path d="M9 4v16M15 4v16"></path>
+            </svg>
+          </span>
+          <div>
+            <h3>Select Asset To Analyse</h3>
+            <p>Live geopolitical pricing panel tuned for ${selectedSector} spillover.</p>
+          </div>
+        </div>
+        <span class="geo-panel-close">x</span>
+      </div>
+
+      <div class="geo-asset-grid">
+        ${Object.values(geoAssets).map(currentAsset => `
+          <button type="button" class="geo-asset-card ${currentAsset.key === asset.key ? 'active' : ''}" data-action="geo-select-asset" data-asset="${currentAsset.key}">
+            <span class="geo-asset-card-label">${currentAsset.key}</span>
+            <div class="geo-asset-card-price">
+              <span>${currentAsset.displayPrice}</span>
+              <span class="geo-asset-card-change ${currentAsset.directionClass}">${currentAsset.displayChange}</span>
+            </div>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="geo-country-spotlight">
+        <div class="geo-country-copy">
+          <span class="geo-country-label">Map Focus</span>
+          <div class="geo-country-name">${country.name}</div>
+          <div class="geo-country-meta">${country.region} - Linked sector: ${selectedSector}</div>
+          <div class="geo-country-tags">${commodityTags}</div>
+        </div>
+        <div class="geo-country-score">
+          <span class="geo-country-score-value" style="color:${countryColor};">${Math.round(country.score ?? 0)}</span>
+          <span class="geo-country-score-label">Tension Score</span>
+        </div>
+      </div>
+
+      <div class="geo-market-header">
+        <div>
+          <span class="geo-market-context">${asset.context}</span>
+          <div class="geo-market-name">
+            <h4>${asset.key}</h4>
+            <span class="geo-market-symbol">/ ${asset.symbol}</span>
+          </div>
+        </div>
+        <div class="geo-market-change ${asset.directionClass}">${asset.displayChange}</div>
+      </div>
+
+      <div class="geo-chart-frame">
+        <canvas id="commodity-chart" class="geo-chart-canvas"></canvas>
+        <div class="geo-chart-stats">
+          <div class="geo-chart-stat">
+            <span class="geo-chart-stat-label">Open</span>
+            <span class="geo-chart-stat-value">${formatGeoNumber(asset.stats.open, statDigits)}</span>
+          </div>
+          <div class="geo-chart-stat">
+            <span class="geo-chart-stat-label">High</span>
+            <span class="geo-chart-stat-value">${formatGeoNumber(asset.stats.high, statDigits)}</span>
+          </div>
+          <div class="geo-chart-stat">
+            <span class="geo-chart-stat-label">Low</span>
+            <span class="geo-chart-stat-value">${formatGeoNumber(asset.stats.low, statDigits)}</span>
+          </div>
+          <div class="geo-chart-stat">
+            <span class="geo-chart-stat-label">Close</span>
+            <span class="geo-chart-stat-value">${formatGeoNumber(asset.stats.close, statDigits)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <span class="geo-section-label">Sector Exposure</span>
+        <div class="geo-exposure-block">${exposureRows}</div>
+      </div>
+
+      <div>
+        <span class="geo-section-label">Desk Read</span>
+        <p class="geo-chart-insight">${asset.insight}</p>
+      </div>
+
+      <div class="geo-action-row">
+        <p class="geo-action-copy">Drag the map to reach every country, then click a border to retune the panel around that market focus.</p>
+        <button type="button" class="join-waitlist-btn" data-action="reset-geo-map">Reset Map</button>
+      </div>
+    </div>
+  `;
+
+  renderGeoCandlestickChart(asset);
+}
+
+function handleGeoRightPanelClickLegacy(event) {
+  const assetCard = event.target.closest('[data-action="geo-select-asset"]');
+  if (assetCard) {
+    selectedGeoAsset = assetCard.dataset.asset || selectedGeoAsset;
+    renderGeoRightPanel();
+    return;
+  }
+
+  const resetMapButton = event.target.closest('[data-action="reset-geo-map"]');
+  if (resetMapButton) {
+    resetGeoMapViewport();
+  }
+}
+
+function applyGeoRightPanelDelegationLegacy() {
+  const geoRightPanel = document.querySelector('.geo-right-panel');
+  if (!geoRightPanel || geoRightPanel.dataset.bound === 'true') return;
+  geoRightPanel.dataset.bound = 'true';
+  geoRightPanel.addEventListener('click', handleGeoRightPanelClick);
+}
+
+function ensureGeoRightPanelLegacy() {
+  if (!document.querySelector('.geo-right-panel')) return;
+  applyGeoRightPanelDelegation();
+  updateSectorStyles();
+  renderGeoRightPanel();
+}
+
 function buildLandingStockRow(stock) {
   const badge = getBadgeStyles(stock.label);
   return `
@@ -847,6 +1294,107 @@ function getCountryName(feature) {
   return feature?.properties?.name || feature?.properties?.NAME || feature?.properties?.ADMIN || feature?.properties?.admin || null;
 }
 
+function getCountryRegion(feature) {
+  return feature?.properties?.CONTINENT || feature?.properties?.continent || feature?.properties?.REGION_UN || feature?.properties?.region_wb || 'Global';
+}
+
+function buildCountrySelection(feature) {
+  const name = getCountryName(feature) || 'Unknown';
+  const entry = getTensionByName(name);
+  return entry || {
+    name,
+    region: getCountryRegion(feature),
+    score: 35,
+    commodities: [],
+  };
+}
+
+function syncFlatMapSelection() {
+  const selectedName = normalizeCountryName(selectedCountry?.name);
+  document.querySelectorAll('.map-country').forEach(path => {
+    const isActive = selectedName && normalizeCountryName(path.getAttribute('data-country')) === selectedName;
+    path.classList.toggle('is-selected', Boolean(isActive));
+  });
+}
+
+function clampGeoMapPosition(x, y, scale = geoMapState.scale) {
+  const minX = GEO_MAP_VIEWBOX.width - GEO_MAP_VIEWBOX.width * scale;
+  const minY = GEO_MAP_VIEWBOX.height - GEO_MAP_VIEWBOX.height * scale;
+  return {
+    x: Math.min(0, Math.max(minX, x)),
+    y: Math.min(0, Math.max(minY, y)),
+  };
+}
+
+function applyGeoMapViewportTransform() {
+  const mapGroup = document.getElementById('map-pan-group');
+  const mapArea = document.getElementById('svg-map-container');
+  if (!mapGroup || !mapArea) return;
+
+  const clamped = clampGeoMapPosition(geoMapState.x, geoMapState.y);
+  geoMapState.x = clamped.x;
+  geoMapState.y = clamped.y;
+  mapGroup.setAttribute('transform', `matrix(${geoMapState.scale} 0 0 ${geoMapState.scale} ${geoMapState.x} ${geoMapState.y})`);
+  mapArea.classList.add('is-draggable');
+}
+
+function bindGeoMapDrag() {
+  const mapArea = document.getElementById('svg-map-container');
+  if (!mapArea || mapArea.dataset.dragBound === 'true') return;
+  mapArea.dataset.dragBound = 'true';
+
+  mapArea.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    geoMapState.isDragging = true;
+    geoMapState.startClientX = event.clientX;
+    geoMapState.startClientY = event.clientY;
+    geoMapState.originX = geoMapState.x;
+    geoMapState.originY = geoMapState.y;
+    geoMapState.hasMoved = false;
+    mapArea.classList.add('is-dragging');
+    if (typeof mapArea.setPointerCapture === 'function') {
+      try {
+        mapArea.setPointerCapture(event.pointerId);
+      } catch {}
+    }
+  });
+
+  mapArea.addEventListener('pointermove', event => {
+    if (!geoMapState.isDragging) return;
+
+    const bounds = mapArea.getBoundingClientRect();
+    const deltaX = (event.clientX - geoMapState.startClientX) * (GEO_MAP_VIEWBOX.width / Math.max(bounds.width, 1));
+    const deltaY = (event.clientY - geoMapState.startClientY) * (GEO_MAP_VIEWBOX.height / Math.max(bounds.height, 1));
+    geoMapState.x = geoMapState.originX + deltaX;
+    geoMapState.y = geoMapState.originY + deltaY;
+    geoMapState.hasMoved = Math.abs(event.clientX - geoMapState.startClientX) > 4 || Math.abs(event.clientY - geoMapState.startClientY) > 4;
+    applyGeoMapViewportTransform();
+  });
+
+  const stopDragging = event => {
+    if (!geoMapState.isDragging) return;
+    geoMapState.isDragging = false;
+    mapArea.classList.remove('is-dragging');
+
+    if (geoMapState.hasMoved) {
+      geoMapState.suppressClick = true;
+      setTimeout(() => {
+        geoMapState.suppressClick = false;
+      }, 0);
+    }
+
+    if (typeof mapArea.releasePointerCapture === 'function') {
+      try {
+        mapArea.releasePointerCapture(event.pointerId);
+      } catch {}
+    }
+  };
+
+  mapArea.addEventListener('pointerup', stopDragging);
+  mapArea.addEventListener('pointercancel', stopDragging);
+  mapArea.addEventListener('pointerleave', stopDragging);
+}
+
 // Morph Projection (Sphere -> Flat)
 function projectMorph(lng, lat, progress, centerLng) {
   // FLAT target (Mercator, adjusted for SVG viewport)
@@ -913,20 +1461,15 @@ function renderFlatMap(features) {
   const mapContainer = document.getElementById('svg-map-container');
   if(!mapContainer) return;
   
-  // Add a defs section for the 3D bevel/gradient effect on the paths
   const svgHeader = `<svg class="flat-map-svg" viewBox="0 0 1000 650" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
     <defs>
-      <filter id="bevel3d" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="3" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.8"/>
-        <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
-      </filter>
       <radialGradient id="oceanGlow" cx="50%" cy="50%" r="50%">
         <stop offset="60%" stop-color="rgba(10,14,20,0)"/>
         <stop offset="100%" stop-color="rgba(255,255,255,0.02)"/>
       </radialGradient>
     </defs>
-    <!-- Background circle that mimics the globe's ocean when progress=0 -->
     <circle id="ocean-bg" cx="500" cy="325" r="300" fill="url(#oceanGlow)" opacity="1"/>
+    <g id="map-pan-group">
   `;
   let svgPaths = '';
   
@@ -936,11 +1479,10 @@ function renderFlatMap(features) {
     const entry = getTensionByName(name);
     const baseColor = entry ? getTensionColor(entry.score) : (countryColors[f.properties.NAME] || countryColors[f.properties.ADMIN]);
     const fill = baseColor ? baseColor : 'rgba(200, 200, 200, 0.08)';
-    // Removed the slow SVG filter="url(#bevel3d)" entirely from paths. 
     svgPaths += `<path id="path-geo-${idx}" class="map-country" fill="${fill}" data-country="${name || f.properties.NAME}"></path>`;
   });
   
-  mapContainer.innerHTML = svgHeader + svgPaths + '</svg>';
+  mapContainer.innerHTML = svgHeader + svgPaths + '</g></svg>';
   
   // Cache for performance
   pathNodes = [];
@@ -951,22 +1493,24 @@ function renderFlatMap(features) {
   });
   
   // Interactivity
-  document.querySelectorAll('.map-country').forEach(p => {
-    p.addEventListener('click', (e) => {
-       // Mock UI update on click
-       const cName = e.target.getAttribute('data-country') || 'ASSET';
-       const title = document.getElementById('active-asset-title');
-       if (title) {
-           title.innerHTML = cName.substring(0, 10).toUpperCase() + ` <span style="opacity:0.4; font-size:10px;">/ USD</span>`;
-       }
-       generateChartData();
+  pathNodes.forEach(({ node, feature }) => {
+    node.addEventListener('click', event => {
+      if (geoMapState.suppressClick) {
+        event.preventDefault();
+        return;
+      }
+
+      setSelectedCountry(buildCountrySelection(feature));
+      showGeoView();
     });
-    // Removed hardcoded pointerEvents here. We handle it in animateUnroll.
   });
   
   // Initially map is transparent
   mapContainer.style.opacity = '0';
   updateMapMorph(0);
+  bindGeoMapDrag();
+  applyGeoMapViewportTransform();
+  syncFlatMapSelection();
 }
 
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
@@ -1013,10 +1557,7 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
         world.polygonAltitude(world.polygonAltitude());
       })
       .onPolygonClick(d => {
-        const name = getCountryName(d);
-        const entry = getTensionByName(name);
-        if (!entry) return;
-        setSelectedCountry(entry);
+        setSelectedCountry(buildCountrySelection(d));
         showGeoView();
       });
 
@@ -1163,6 +1704,8 @@ requestAnimationFrame(animateUnroll);
 window.addEventListener('resize', () => {
   world.width(window.innerWidth);
   world.height(window.innerHeight);
+  applyGeoMapViewportTransform();
+  renderGeoCandlestickChart();
 });
 
 
@@ -1573,6 +2116,10 @@ document.querySelectorAll('.asset-card').forEach(card => {
   });
 });
 
+function generateChartDataLegacy() {
+  renderGeoCandlestickChart(getGeoAsset());
+}
+
 // GTI Sparkline
 const sparkCanvas = document.getElementById('gti-sparkline');
 if (sparkCanvas) {
@@ -1650,4 +2197,5 @@ document.querySelectorAll('.region-btn').forEach(btn => {
 });
 updateRegionButtons();
 
+import './appShell.js';
 

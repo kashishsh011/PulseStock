@@ -1,50 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PulseStock - Multi-Signal Engine</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <!-- 3D Globe Background -->
-    <div id="globeViz"></div>
 
-    <header class="top-nav glass">
-      <div class="logo">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="pulse-icon" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-        PulseStock <span class="badge">v1.0</span>
-      </div>
-      
-      <div class="macro-stats">
-        <div class="stat"><span class="label">REGIME:</span> <span class="value amber">FED POLICY DAY</span></div>
-        <div class="stat"><span class="label">VIX:</span> <span class="value green">14.2</span></div>
-        <div class="stat"><span class="label">CRUDE:</span> <span class="value red">$85.4</span></div>
-        <div class="stat"><span class="label">USDINR:</span> <span class="value">83.1</span></div>
-      </div>
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PulseStock - Multi-Signal Engine</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+    rel="stylesheet">
+</head>
 
-      <div class="tabs">
-        <button class="tab active" data-target="earth">EARTH PULSE</button>
-        <button class="tab" data-target="geo">GEO MAP</button>
-        <button class="tab" data-target="signals">AI SIGNALS</button>
-      </div>
+<body>
+  <!-- 3D Globe Background -->
+  <div id="globeViz"></div>
 
-      <div class="clock-display">
-        <span class="live-dot"></span> LIVE // <span id="clock">--:--:--</span>
-      </div>
-    </header>
+  <header class="top-nav glass">
+    <div class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="pulse-icon" stroke="#22c55e" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+      </svg>
+      PulseStock <span class="badge">v1.0</span>
+    </div>
 
-    <div class="views-container" id="views-container">
-      
-      <!-- View 1: Earth Pulse -->
-      <section id="earth-view" class="view-section" style="display: flex; flex-direction: column;">
-        <main class="main-content" style="padding-top: 80px; flex: 1;">
+    <div class="macro-stats">
+      <div class="stat"><span class="label">REGIME:</span> <span class="value amber">FED POLICY DAY</span></div>
+      <div class="stat"><span class="label">VIX:</span> <span class="value green">14.2</span></div>
+      <div class="stat"><span class="label">CRUDE:</span> <span class="value red">$85.4</span></div>
+      <div class="stat"><span class="label">USDINR:</span> <span class="value">83.1</span></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-target="earth">EARTH PULSE</button>
+      <button class="tab" data-target="geo">GEO MAP</button>
+      <button class="tab" data-target="signals">AI SIGNALS</button>
+    </div>
+
+    <div class="clock-display">
+      <span class="live-dot"></span> LIVE // <span id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <div class="views-container" id="views-container">
+
+    <!-- View 1: Earth Pulse -->
+    <section id="earth-view" class="view-section" style="display: flex; flex-direction: column;">
+      <main class="main-content" style="padding-top: 80px; flex: 1;">
         <!-- Left Panel: Filters / Selection -->
         <aside class="left-panel">
           <div class="panel glass slide-in-left" id="left-filter-panel">
             <button class="minimize-btn" id="minimize-left-btn" title="Toggle Panel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
             </button>
             <div class="panel-content-wrap">
               <!-- GTI Box -->
@@ -56,7 +66,8 @@
               </div>
 
               <!-- GTI Sparkline -->
-              <canvas id="gti-sparkline" width="240" height="36" style="width:100%;margin:8px 0 16px;opacity:0.7"></canvas>
+              <canvas id="gti-sparkline" width="240" height="36"
+                style="width:100%;margin:8px 0 16px;opacity:0.7"></canvas>
 
               <h3>FILTER BY REGION</h3>
               <div class="region-grid" id="region-filters">
@@ -107,7 +118,9 @@
                   <span class="scenario-label">Oil Shock</span>
                   <span class="scenario-val" id="oil-val">0%</span>
                 </div>
-                <div class="scenario-bar-bg"><div class="scenario-bar" id="oil-bar" style="width:0%"></div></div>
+                <div class="scenario-bar-bg">
+                  <div class="scenario-bar" id="oil-bar" style="width:0%"></div>
+                </div>
                 <input type="range" min="0" max="100" value="0" id="oil-slider" style="width:100%">
               </div>
 
@@ -116,7 +129,9 @@
                   <span class="scenario-label">Geo Escalation</span>
                   <span class="scenario-val" id="geo-val">40%</span>
                 </div>
-                <div class="scenario-bar-bg"><div class="scenario-bar" id="geo-bar" style="width:40%"></div></div>
+                <div class="scenario-bar-bg">
+                  <div class="scenario-bar" id="geo-bar" style="width:40%"></div>
+                </div>
                 <input type="range" min="0" max="100" value="40" id="geo-slider" style="width:100%">
               </div>
 
@@ -125,7 +140,9 @@
                   <span class="scenario-label">Rate Change</span>
                   <span class="scenario-val" id="rate-val">0%</span>
                 </div>
-                <div class="scenario-bar-bg"><div class="scenario-bar" id="rate-bar" style="width:0%"></div></div>
+                <div class="scenario-bar-bg">
+                  <div class="scenario-bar" id="rate-bar" style="width:0%"></div>
+                </div>
                 <input type="range" min="0" max="100" value="0" id="rate-slider" style="width:100%">
               </div>
             </div>
@@ -134,10 +151,13 @@
 
         <!-- Right Panel: Multi-Signal Engine -->
         <aside class="right-panel">
-          
+
           <div class="panel glass slide-in-right main-signal-card" id="right-signal-panel">
             <button class="minimize-btn" id="minimize-right-btn" title="Toggle Panel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s;">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
             </button>
             <div class="panel-content-wrap">
               <!-- Dynamic content injected by renderLandingRightPanel() -->
@@ -150,123 +170,146 @@
       <!-- Bottom panel / Ticker (Specific to Earth View) -->
       <footer class="bottom-panel slide-in-up" id="earth-footer">
         <div class="news-ticker glass">
-           <span class="ticker-label">GEO PULSE:</span>
-           <div class="ticker-content" id="ticker-content">
-             <span class="tick"><span style="color:#ef4444">●</span> Strait of Hormuz Naval Drill · Crude +4.2% · Middle East · <span style="color:#ef4444">CRITICAL</span></span>
-             <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> ECB Emergency Statement · EUR/USD volatile · Europe · <span style="color:#f59e0b">HIGH</span></span>
-             <span class="tick" style="margin-left:3rem"><span style="color:#3b82f6">●</span> South China Sea patrol · shipping risk · Asia Pac · <span style="color:#3b82f6">MONITOR</span></span>
-             <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> USDINR approaching 85 threshold · FII outflow risk · <span style="color:#ef4444">CRITICAL</span></span>
-             <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> Fed minutes released · US10Y +12bps · rate differential risk · <span style="color:#f59e0b">HIGH</span></span>
-             <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> Red Sea shipping lanes disrupted · import cost spike risk · <span style="color:#ef4444">CRITICAL</span></span>
-           </div>
+          <span class="ticker-label">GEO PULSE:</span>
+          <div class="ticker-content" id="ticker-content">
+            <span class="tick"><span style="color:#ef4444">●</span> Strait of Hormuz Naval Drill · Crude +4.2% · Middle
+              East · <span style="color:#ef4444">CRITICAL</span></span>
+            <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> ECB Emergency Statement ·
+              EUR/USD volatile · Europe · <span style="color:#f59e0b">HIGH</span></span>
+            <span class="tick" style="margin-left:3rem"><span style="color:#3b82f6">●</span> South China Sea patrol ·
+              shipping risk · Asia Pac · <span style="color:#3b82f6">MONITOR</span></span>
+            <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> USDINR approaching 85
+              threshold · FII outflow risk · <span style="color:#ef4444">CRITICAL</span></span>
+            <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> Fed minutes released ·
+              US10Y +12bps · rate differential risk · <span style="color:#f59e0b">HIGH</span></span>
+            <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> Red Sea shipping lanes
+              disrupted · import cost spike risk · <span style="color:#ef4444">CRITICAL</span></span>
+          </div>
         </div>
       </footer>
-      </section>
+    </section>
 
-      <!-- View 2: Geo Map -->
-      <section id="geo-view" class="view-section" style="padding-top: 80px;">
-         <div class="geo-layout">
-            <!-- Central Map Container -->
-            <div class="geo-map-area" id="svg-map-container">
-               <!-- Map injected here -->
+    <!-- View 2: Geo Map -->
+    <section id="geo-view" class="view-section" style="padding-top: 80px;">
+      <div class="geo-layout">
+        <!-- Central Map Container -->
+        <div class="geo-map-area" id="svg-map-container">
+          <!-- Map injected here -->
+        </div>
+
+        <!-- Floating left panel specific for Map -->
+        <div class="geo-left-panel glass">
+          <div class="geo-panel-kicker">Market Impact Map</div>
+          <button class="geo-filter-btn active">
+            <span>Filters</span>
+            <span>Live</span>
+          </button>
+          <div class="filter-controls">
+            <label><span class="geo-filter-dot geo-filter-dot-critical"></span> Critical &gt;80</label>
+            <label><span class="geo-filter-dot geo-filter-dot-medium"></span> Medium &gt;35</label>
+            <label><span class="geo-filter-dot geo-filter-dot-low"></span> Low &lt;35</label>
+          </div>
+          <p class="geo-drag-copy">Drag the map to move across continents and click any country to focus the side panel.</p>
+          <div class="geo-side-chip">Pan Enabled</div>
+        </div>
+
+        <!-- Right Panel: Asset charts and info -->
+        <div class="geo-right-panel glass">
+          <div class="geo-right-header">
+            <span class="asset-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M12 2L2 22h20L12 2z" />
+              </svg></span>
+            <h3>SELECT ASSET TO ANALYSE</h3>
+          </div>
+
+          <!-- Custom asset selectors based on screenshot -->
+          <div class="asset-tabs-wrap">
+            <div class="asset-card active" data-asset="RUB">
+              <span class="a-title">RUB</span>
+              <div class="a-vals"><span class="a-price">0.0</span> <span class="a-pct green">+0.00%</span></div>
             </div>
-
-            <!-- Floating left panel specific for Map -->
-            <div class="geo-left-panel glass">
-               <h3>MARKET IMPACT MAP</h3>
-               <div class="filter-controls" style="margin-top: 15px;">
-                  <button class="geo-filter-btn active">All</button>
-                  <label><input type="checkbox" checked/> Critical (Red)</label>
-                  <label><input type="checkbox" checked/> High (Amber)</label>
-                  <label><input type="checkbox" checked/> Moderate (Blue)</label>
-               </div>
+            <div class="asset-card" data-asset="OIL">
+              <span class="a-title">OIL</span>
+              <div class="a-vals"><span class="a-price">81.3</span> <span class="a-pct red">-0.88%</span></div>
             </div>
-
-            <!-- Right Panel: Asset charts and info -->
-            <div class="geo-right-panel glass">
-               <div class="geo-right-header">
-                 <span class="asset-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 22h20L12 2z"/></svg></span>
-                 <h3>SELECT ASSET TO ANALYSE</h3>
-               </div>
-               
-               <!-- Custom asset selectors based on screenshot -->
-               <div class="asset-tabs-wrap">
-                  <div class="asset-card active" data-asset="RUB">
-                     <span class="a-title">RUB</span>
-                     <div class="a-vals"><span class="a-price">0.0</span> <span class="a-pct green">+0.00%</span></div>
-                  </div>
-                  <div class="asset-card" data-asset="OIL">
-                     <span class="a-title">OIL</span>
-                     <div class="a-vals"><span class="a-price">81.3</span> <span class="a-pct red">-0.88%</span></div>
-                  </div>
-                  <div class="asset-card" data-asset="GOLD">
-                     <span class="a-title">GOLD</span>
-                     <div class="a-vals"><span class="a-price">2375.3</span> <span class="a-pct green">+1.51%</span></div>
-                  </div>
-                  <div class="asset-card" data-asset="GAS">
-                     <span class="a-title">GAS</span>
-                     <div class="a-vals"><span class="a-price">3.150</span> <span class="a-pct red">-1.47%</span></div>
-                  </div>
-               </div>
-
-               <!-- Chart display area -->
-               <div class="chart-container">
-                  <div class="chart-header">
-                     <h4 id="active-asset-title">RUB <span style="opacity:0.4; font-size:10px;">/ USD</span></h4>
-                     <span class="c-indicator green" id="active-asset-indicator">▲ 0.00%</span>
-                  </div>
-                  <canvas id="commodity-chart" width="400" height="180"></canvas>
-               </div>
-
-               <!-- Sector Exposure -->
-               <div class="sector-exposure">
-                  <h4><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> SECTOR EXPOSURE</h4>
-                  
-                  <div class="exposure-row">
-                     <span class="ex-lbl">Energy</span>
-                     <div class="ex-bar-bg"><div class="ex-bar-fill" style="width: 82%;"></div></div>
-                     <span class="ex-val">82%</span>
-                  </div>
-                  <div class="exposure-row">
-                     <span class="ex-lbl">Defense</span>
-                     <div class="ex-bar-bg"><div class="ex-bar-fill" style="width: 45%;"></div></div>
-                     <span class="ex-val">45%</span>
-                  </div>
-               </div>
-               
-               <!-- Join Waitlist Bottom Panel Idea -->
-               <div style="margin-top:auto; display:flex; justify-content:center;">
-                  <button class="join-waitlist-btn">● JOIN WAITLIST</button>
-               </div>
+            <div class="asset-card" data-asset="GOLD">
+              <span class="a-title">GOLD</span>
+              <div class="a-vals"><span class="a-price">2375.3</span> <span class="a-pct green">+1.51%</span></div>
+            </div>
+            <div class="asset-card" data-asset="GAS">
+              <span class="a-title">GAS</span>
+              <div class="a-vals"><span class="a-price">3.150</span> <span class="a-pct red">-1.47%</span></div>
             </div>
           </div>
-            
-            <div class="bottom-trend-panel glass">
-               <div class="trend-left">
-                  <span>GTI TREND</span>
-                  <span class="trend-val">71.4</span>
-               </div>
-               <div class="trend-bars">
-                  <div class="t-bar amber" style="height:40%"></div>
-                  <div class="t-bar amber" style="height:50%"></div>
-                  <div class="t-bar" style="height:30%"></div>
-                  <div class="t-bar red" style="height:80%"></div>
-                  <div class="t-bar" style="height:40%"></div>
-                  <div class="t-bar amber" style="height:60%"></div>
-               </div>
-               
-               <div class="mini-news-pills">
-                  <div class="news-pill red">
-                     <span>!</span> <p>Strait of Hormuz Naval Drill... <br/><small>08:57 AM - Middle East - CRITICAL</small></p>
-                  </div>
-                  <div class="news-pill amber">
-                     <span>!</span> <p>ECB Emergency Statement... <br/><small>07:57 AM - Europe - HIGH</small></p>
-                  </div>
-               </div>
+
+          <!-- Chart display area -->
+          <div class="chart-container">
+            <div class="chart-header">
+              <h4 id="active-asset-title">RUB <span style="opacity:0.4; font-size:10px;">/ USD</span></h4>
+              <span class="c-indicator green" id="active-asset-indicator">▲ 0.00%</span>
             </div>
-         </div>
-      </section>
-    </div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+            <canvas id="commodity-chart" width="400" height="180"></canvas>
+          </div>
+
+          <!-- Sector Exposure -->
+          <div class="sector-exposure">
+            <h4><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+              </svg> SECTOR EXPOSURE</h4>
+
+            <div class="exposure-row">
+              <span class="ex-lbl">Energy</span>
+              <div class="ex-bar-bg">
+                <div class="ex-bar-fill" style="width: 82%;"></div>
+              </div>
+              <span class="ex-val">82%</span>
+            </div>
+            <div class="exposure-row">
+              <span class="ex-lbl">Defense</span>
+              <div class="ex-bar-bg">
+                <div class="ex-bar-fill" style="width: 45%;"></div>
+              </div>
+              <span class="ex-val">45%</span>
+            </div>
+          </div>
+
+          <!-- Join Waitlist Bottom Panel Idea -->
+          <div style="margin-top:auto; display:flex; justify-content:center;">
+            <button class="join-waitlist-btn">● JOIN WAITLIST</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-trend-panel glass">
+        <div class="trend-left">
+          <span>GTI TREND</span>
+          <span class="trend-val">71.4</span>
+        </div>
+        <div class="trend-bars">
+          <div class="t-bar amber" style="height:40%"></div>
+          <div class="t-bar amber" style="height:50%"></div>
+          <div class="t-bar" style="height:30%"></div>
+          <div class="t-bar red" style="height:80%"></div>
+          <div class="t-bar" style="height:40%"></div>
+          <div class="t-bar amber" style="height:60%"></div>
+        </div>
+
+        <div class="mini-news-pills">
+          <div class="news-pill red">
+            <span>!</span>
+            <p>Strait of Hormuz Naval Drill... <br /><small>08:57 AM - Middle East - CRITICAL</small></p>
+          </div>
+          <div class="news-pill amber">
+            <span>!</span>
+            <p>ECB Emergency Statement... <br /><small>07:57 AM - Europe - HIGH</small></p>
+          </div>
+        </div>
+      </div>
+  </div>
+  </section>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
 </html>
