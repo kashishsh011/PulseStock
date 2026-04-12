@@ -9,12 +9,13 @@ import { getTensionByName, getTensionColor, getISOByName } from './data/countryT
 
 // 1. Initialize Lenis for smooth scroll (even though UI is mostly fixed, good for any internal overflow)
 const lenis = new Lenis({
-  duration: 1.2,
-  easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+  duration: 1.45,
+  easing: (t) => 1 - Math.pow(1 - t, 2.8),
   direction: 'vertical',
   gestureDirection: 'vertical',
   smooth: true,
 });
+export { lenis };
 
 function raf(time) {
   lenis.raf(time);
@@ -356,7 +357,7 @@ function showGeoView() {
   const geoTab = document.querySelector('.top-nav .tab[data-target="geo"]');
   if (geoTab) {
     geoTab.classList.add('active');
-    lenis.scrollTo('#geo-view', { duration: 1.5 });
+    lenis.scrollTo('#geo-view', { duration: 1.75 });
   }
 }
 
@@ -1546,13 +1547,13 @@ mainTabs.forEach(tab => {
     // Animate a brief flash or feedback
     gsap.fromTo(tab, 
       { backgroundColor: 'rgba(255,255,255,0.2)' },
-      { backgroundColor: 'rgba(34, 197, 94, 0.1)', duration: 0.4 }
+      { backgroundColor: 'rgba(34, 197, 94, 0.1)', duration: 0.52, ease: 'power2.out' }
     );
     
     // SPA scrolling logic
     const target = tab.getAttribute('data-target');
-    if (target === 'earth') lenis.scrollTo('#earth-view', { duration: 1.5 });
-    if (target === 'geo') lenis.scrollTo('#geo-view', { duration: 1.5 });
+    if (target === 'earth') lenis.scrollTo('#earth-view', { duration: 1.75 });
+    if (target === 'geo') lenis.scrollTo('#geo-view', { duration: 1.75 });
   });
 });
 
@@ -1788,6 +1789,9 @@ function finalizeAppInitialization() {
     document.querySelector('.asset-card[data-asset="OIL"]')?.classList.add('active');
     loadAssetChart('OIL');
   }, 300);
+
+  import('./tradeView.js').then(({ initTradeView }) => initTradeView());
+  import('./portfolioView.js').then(({ initPortfolioView }) => initPortfolioView());
 }
 
 if (document.readyState === 'loading') {

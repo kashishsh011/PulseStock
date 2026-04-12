@@ -27,7 +27,8 @@
       <div class="tabs">
         <button class="tab active" data-target="earth">EARTH PULSE</button>
         <button class="tab" data-target="geo">GEO MAP</button>
-        <button class="tab" data-target="signals">AI SIGNALS</button>
+        <button class="tab" data-target="signals">TRADE DESK</button>
+        <button class="tab" data-target="portfolio">PORTFOLIO</button>
       </div>
 
       <div class="clock-display">
@@ -306,6 +307,256 @@
                </div>
             </div>
          </div>
+      </section>
+
+      <!-- View 3: Trade Desk (AI Signals) -->
+      <section id="trade-view" class="view-section trade-view-section">
+        <div class="trade-view-root">
+          <div id="trade-context-ribbon" class="trade-context-ribbon glass trade-interactive">
+            <div class="trade-ribbon-inner">
+              <div class="trade-ribbon-chain" id="trade-ribbon-chain">
+                <span class="trade-ribbon-item"><span class="trade-flag" id="trade-ribbon-flag">🇷🇺</span> <span id="trade-ribbon-country">Russia</span></span>
+                <span class="trade-ribbon-sep">→</span>
+                <span class="trade-ribbon-item"><span aria-hidden="true">🛢</span> <span id="trade-ribbon-commodity">Crude Oil</span></span>
+                <span class="trade-ribbon-sep">→</span>
+                <span class="trade-ribbon-item"><span aria-hidden="true">📉</span> <span id="trade-ribbon-regime">Risk-Off</span> Regime</span>
+                <span class="trade-ribbon-sep">→</span>
+                <span class="trade-ribbon-item trade-ribbon-stock"><span id="trade-ribbon-stock-name">HDFC Bank</span> <span class="trade-badge trade-badge--ribbon trade-badge--conflict" id="trade-ribbon-stock-label">CONFLICTED</span></span>
+              </div>
+              <div class="trade-ribbon-impact" id="trade-ribbon-impact"></div>
+            </div>
+            <button type="button" class="trade-ribbon-collapse" id="trade-ribbon-collapse" aria-expanded="true" aria-label="Collapse context ribbon">▾</button>
+          </div>
+
+          <div class="trade-desk-grid">
+            <aside class="trade-col trade-col-left glass trade-interactive" id="trade-col-left">
+              <div class="trade-watchlist-head">WATCHLIST</div>
+              <ul class="trade-watchlist" id="trade-watchlist"></ul>
+            </aside>
+
+            <div class="trade-col trade-col-center glass trade-interactive" id="trade-col-center">
+              <div class="trade-chart-block">
+                <div class="trade-chart-head">
+                  <h4 class="trade-chart-title" id="trade-chart-title">HDFC Bank</h4>
+                  <span class="trade-chart-ticker mono" id="trade-chart-ticker">HDFCBANK</span>
+                </div>
+                <canvas id="trade-candle-chart" width="640" height="220" class="trade-canvas-candles"></canvas>
+                <div class="ohlc-row trade-ohlc-row">
+                  <div class="ohlc-cell"><span class="ohlc-label">OPEN</span><span class="ohlc-val" id="trade-ohlc-open">—</span></div>
+                  <div class="ohlc-cell"><span class="ohlc-label">HIGH</span><span class="ohlc-val" id="trade-ohlc-high">—</span></div>
+                  <div class="ohlc-cell"><span class="ohlc-label">LOW</span><span class="ohlc-val" id="trade-ohlc-low">—</span></div>
+                  <div class="ohlc-cell" style="border-right:none"><span class="ohlc-label">CLOSE</span><span class="ohlc-val" id="trade-ohlc-close">—</span></div>
+                </div>
+                <div class="trade-rsi-wrap">
+                  <div class="trade-rsi-label mono">RSI (14)</div>
+                  <canvas id="trade-rsi-chart" width="640" height="72" class="trade-canvas-rsi"></canvas>
+                </div>
+              </div>
+
+              <div class="trade-order-ticket" id="trade-order-ticket">
+                <div class="trade-ticket-head">
+                  <div>
+                    <div class="trade-ticket-name" id="trade-ticket-stock-name">HDFC Bank</div>
+                    <div class="trade-ticket-ticker mono" id="trade-ticket-ticker">HDFCBANK</div>
+                  </div>
+                  <div class="trade-ticket-price-wrap">
+                    <span class="trade-ticket-price-label mono">LAST</span>
+                    <span class="trade-ticket-price mono" id="trade-ticket-price">—</span>
+                  </div>
+                </div>
+                <div class="trade-ticket-side-row">
+                  <button type="button" class="trade-side-btn trade-side-buy active" data-side="buy">BUY</button>
+                  <button type="button" class="trade-side-btn trade-side-sell" data-side="sell">SELL</button>
+                </div>
+                <div class="trade-ticket-fields">
+                  <label class="trade-field"><span class="mono">Qty</span><input type="number" id="trade-qty" min="1" value="10" /></label>
+                  <div class="trade-ordertype-row">
+                    <span class="mono">Type</span>
+                    <div class="trade-toggle-pair">
+                      <button type="button" class="trade-type-btn active" data-otype="market">Market</button>
+                      <button type="button" class="trade-type-btn" data-otype="limit">Limit</button>
+                    </div>
+                  </div>
+                  <label class="trade-field"><span class="mono">Stop loss</span><input type="text" id="trade-sl" placeholder="Optional" /></label>
+                  <label class="trade-field"><span class="mono">Take profit</span><input type="text" id="trade-tp" placeholder="Optional" /></label>
+                </div>
+                <div class="trade-margin-row mono">
+                  <span>Margin required (mock)</span>
+                  <span id="trade-margin-val">—</span>
+                </div>
+                <button type="button" class="trade-simulate-btn" id="trade-simulate-btn">SIMULATE TRADE</button>
+                <p class="trade-disclaimer mono">Educational signals only · Not financial advice · PulseStock v1.0</p>
+              </div>
+            </div>
+
+            <aside class="trade-col trade-col-right glass trade-interactive" id="trade-col-right">
+              <div class="trade-fusion-head">
+                <span class="mono trade-fusion-head-label">FUSION SCORE</span>
+                <span class="trade-fusion-score-badge" id="trade-fusion-score-badge">+0.00</span>
+              </div>
+              <div id="trade-fusion-bars"></div>
+              <div class="trade-divider"></div>
+              <div class="trade-ai-block">
+                <div class="mono trade-subhead">AI REASONING</div>
+                <div id="trade-ai-text" class="trade-ai-text"></div>
+              </div>
+              <div class="trade-divider"></div>
+              <div class="trade-risk-block">
+                <div class="mono trade-subhead">RISK METRICS</div>
+                <ul class="trade-risk-list" id="trade-risk-list"></ul>
+              </div>
+              <button type="button" class="trade-portfolio-btn" id="trade-portfolio-btn">APPLY TO PORTFOLIO</button>
+            </aside>
+          </div>
+
+          <footer class="trade-bottom-ticker glass trade-interactive">
+            <div class="news-ticker glass trade-news-ticker-inner">
+              <span class="ticker-label">BANKING / CRUDE:</span>
+              <div class="ticker-content" id="trade-ticker-content">
+                <span class="tick"><span style="color:#ef4444">●</span> HDFC Bank · NIM compression risk on crude spike · Banking · <span style="color:#ef4444">BEARISH</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> SBI · PSU spreads stable but oil pass-through watch · Banking · <span style="color:#f59e0b">MONITOR</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> Brent curve backwardation · refinery margins · Crude · <span style="color:#ef4444">HIGH</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#22c55e">●</span> Kotak Bank · CASA mix buffers commodity shock · Banking · <span style="color:#22c55e">BULLISH</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> ICICI · FII flows sensitive to DXY + crude · Banking · <span style="color:#f59e0b">WATCH</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> Russia supply narrative · energy beta to Nifty Bank · Crude · <span style="color:#ef4444">CRITICAL</span></span>
+              </div>
+            </div>
+          </footer>
+        </div>
+
+        <div id="trade-modal-overlay" class="trade-modal-overlay" aria-hidden="true">
+          <div class="trade-modal glass">
+            <button type="button" class="trade-modal-close" id="trade-modal-close" aria-label="Close">✕</button>
+            <h3 class="trade-modal-title">Simulated outcome</h3>
+            <div id="trade-modal-body" class="trade-modal-body"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 4: Portfolio -->
+      <section id="portfolio-view" class="view-section portfolio-view-section">
+        <div class="portfolio-root">
+          <div id="port-summary-bar" class="port-summary-bar glass port-interactive">
+            <div class="port-summary-pill">
+              <span class="port-summary-label">TOTAL P&amp;L</span>
+              <span id="port-sum-pnl" class="port-summary-value">—</span>
+            </div>
+            <div class="port-summary-pill">
+              <span class="port-summary-label">DAY CHANGE %</span>
+              <span id="port-sum-day" class="port-summary-value">—</span>
+            </div>
+            <div class="port-summary-pill">
+              <span class="port-summary-label">PORTFOLIO VALUE</span>
+              <span id="port-sum-value" class="port-summary-value">—</span>
+            </div>
+            <div class="port-summary-pill">
+              <span class="port-summary-label">SHARPE (MOCK)</span>
+              <span id="port-sum-sharpe" class="port-summary-value">1.15</span>
+            </div>
+          </div>
+
+          <div class="port-grid">
+            <aside id="port-col-left" class="port-col port-col-left glass port-interactive">
+              <div class="port-positions-head">
+                <span class="mono port-positions-title">OPEN POSITIONS</span>
+                <span class="port-positions-badge mono" id="port-positions-count">5</span>
+              </div>
+              <ul class="port-positions-list" id="port-positions-list"></ul>
+            </aside>
+
+            <div id="port-col-center" class="port-col port-col-center glass port-interactive">
+              <div class="port-chart-block">
+                <div class="trade-chart-head port-chart-head">
+                  <h4 class="trade-chart-title" id="port-chart-title">HDFC Bank</h4>
+                  <span class="trade-chart-ticker mono" id="port-chart-ticker">HDFCBANK</span>
+                </div>
+                <canvas id="portfolio-candle-chart" width="640" height="220" class="trade-canvas-candles"></canvas>
+                <div class="ohlc-row trade-ohlc-row">
+                  <div class="ohlc-cell"><span class="ohlc-label">OPEN</span><span class="ohlc-val" id="port-ohlc-open">—</span></div>
+                  <div class="ohlc-cell"><span class="ohlc-label">HIGH</span><span class="ohlc-val" id="port-ohlc-high">—</span></div>
+                  <div class="ohlc-cell"><span class="ohlc-label">LOW</span><span class="ohlc-val" id="port-ohlc-low">—</span></div>
+                  <div class="ohlc-cell" style="border-right:none"><span class="ohlc-label">CLOSE</span><span class="ohlc-val" id="port-ohlc-close">—</span></div>
+                </div>
+              </div>
+              <div class="port-metrics-grid">
+                <div class="metric">
+                  <span>Unrealized P&amp;L</span>
+                  <span id="port-metric-pnl" class="mono">—</span>
+                </div>
+                <div class="metric">
+                  <span>P&amp;L %</span>
+                  <span id="port-metric-pnl-pct" class="mono">—</span>
+                </div>
+                <div class="metric">
+                  <span>Position size</span>
+                  <span id="port-metric-size" class="mono">—</span>
+                </div>
+                <div class="metric">
+                  <span>Days held</span>
+                  <span id="port-metric-days" class="mono">—</span>
+                </div>
+              </div>
+              <div id="port-geo-risk" class="port-geo-risk-tag">
+                This position carries crude oil / Russia geopolitical risk exposure.
+                <a href="#" id="port-link-geo">→ Review in Geo Map</a>
+              </div>
+            </div>
+
+            <aside id="port-col-right" class="port-col port-col-right glass port-interactive">
+              <div class="trade-fusion-head">
+                <span class="mono trade-fusion-head-label">POSITION FUSION</span>
+                <span class="trade-fusion-score-badge" id="port-fusion-score-badge">+0.00</span>
+              </div>
+              <div id="port-fusion-bars"></div>
+              <div class="trade-divider"></div>
+              <div class="mono trade-subhead">PORTFOLIO RISK</div>
+              <ul class="trade-risk-list">
+                <li><span class="trade-risk-k">Overall Regime</span><span class="trade-risk-v" style="color:var(--neon-amber)">FED POLICY DAY</span></li>
+                <li><span class="trade-risk-k">Geo Exposure Score</span><span class="trade-risk-v">71.4 / 100</span></li>
+                <li><span class="trade-risk-k">Concentrated Risk</span><span class="trade-risk-v">Banking (100%)</span></li>
+                <li><span class="trade-risk-k">Suggested Hedge</span><span class="trade-risk-v">Short Nifty Bank futures (mock)</span></li>
+              </ul>
+              <div class="trade-divider"></div>
+              <div class="mono trade-subhead" style="margin-bottom:8px">DRAWDOWN (20 SESSIONS)</div>
+              <canvas id="port-drawdown-chart" width="400" height="80" style="width:100%;height:80px;display:block;background:rgba(0,0,0,0.2);border-radius:4px;border:1px solid rgba(255,255,255,0.08)"></canvas>
+              <div class="trade-divider"></div>
+              <button type="button" class="trade-portfolio-btn" id="port-btn-trade">GO TO TRADE DESK</button>
+            </aside>
+          </div>
+
+          <footer class="port-bottom-ticker glass port-interactive">
+            <div class="news-ticker glass port-news-ticker-inner">
+              <span class="ticker-label">PORTFOLIO PULSE:</span>
+              <div class="ticker-content" id="port-ticker-content">
+                <span class="tick"><span style="color:#22c55e">●</span> HDFC Bank Q3 beat · NIM stable · <span style="color:#22c55e">HDFCBANK</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#f59e0b">●</span> SBI rural lending +22% YoY · PSU tailwind · <span style="color:#f59e0b">SBIN</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> ICICI FII selling cluster · crude beta · <span style="color:#ef4444">ICICIBANK</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#22c55e">●</span> Kotak digital 811 milestone · CASA mix · <span style="color:#22c55e">KOTAKBANK</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#aab4c8">●</span> Axis SME book growth · neutral tape · <span style="color:#aab4c8">AXISBANK</span></span>
+                <span class="tick" style="margin-left:3rem"><span style="color:#ef4444">●</span> Russia crude narrative · Nifty Bank hedge watch · <span style="color:#ef4444">SECTOR</span></span>
+              </div>
+            </div>
+          </footer>
+
+          <div id="port-waitlist-anchor" class="port-waitlist-sticky-wrap port-interactive" aria-hidden="true">
+            <div id="port-waitlist-banner" class="port-waitlist-banner">
+              <div id="port-waitlist-form-pane" class="port-waitlist-row">
+                <span class="port-waitlist-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </span>
+                <p class="port-waitlist-message">Save your portfolio &amp; get live geo-risk alerts</p>
+                <div class="port-waitlist-actions">
+                  <input type="email" id="port-waitlist-email" class="port-waitlist-input" placeholder="you@domain.com" autocomplete="email" />
+                  <button type="button" class="port-waitlist-btn" id="port-waitlist-submit">Join Waitlist</button>
+                </div>
+              </div>
+              <div id="port-waitlist-success-pane" class="port-waitlist-success-pane" hidden>
+                <p class="port-waitlist-success-text">You're on the list ✓</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="port-toast" class="port-toast" role="status" aria-live="polite"></div>
       </section>
     </div>
     <script type="module" src="/src/main.js"></script>
