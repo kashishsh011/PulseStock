@@ -6,6 +6,7 @@ const anime = animePkg.default || animePkg;
 import Lenis from '@studio-freight/lenis'
 import { calcFusionScore } from './engine/fusionEngine.js';
 import { getTensionByName, getTensionColor, getISOByName } from './data/countryTensionData.js';
+import { mountLightweightCandlestickFromCanvas } from './lightweightCandleMount.js';
 
 // 1. Initialize Lenis for smooth scroll (even though UI is mostly fixed, good for any internal overflow)
 const lenis = new Lenis({
@@ -88,6 +89,10 @@ let countriesGeo = [];
 let globeFeatures = [];
 let pathNodes = [];
 let capturedCenterLng = 0;
+let panOffset = { x: 0, y: 0 };
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let didPan = false;
 // Landing page sidebar state (separate from geo map sidebar)
 let landingSelectedStock = null;
 let landingSidebarMode = 'list';
@@ -632,6 +637,9 @@ function ensureGeoRightPanel() {
   updateSectorStyles();
   renderGeoRightPanel();
   wireGeoMapChromeOnce();
+  // Hide right panel by default — only shown on country click
+  const geoRight = document.querySelector('.geo-right-panel');
+  if (geoRight) geoRight.classList.add('hidden');
 }
 
 function wireGeoMapChromeOnce() {
@@ -947,7 +955,10 @@ function projectMorph(lng, lat, progress, centerLng) {
   // FLAT target (Mercator, adjusted for SVG viewport)
   const xf = (lng + 180) * (1000 / 360) * 0.95 + 10;
   const latRad = lat * Math.PI / 180;
-  const mercN = Math.log(Math.tan((Math.PI / 4) + (latRad / 2)));
+  // Clamp latitude only for Mercator — poles are singular; skipping vertices broke whole countries.
+  const latMerc = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const latRadMerc = latMerc * Math.PI / 180;
+  const mercN = Math.log(Math.tan((Math.PI / 4) + (latRadMerc / 2)));
   const yf = Math.max(-1000, Math.min(1500, (650 / 2) - (1000 * mercN / (2 * Math.PI)))) * 1.1 - 40;
 
   // SPHERE target (Orthographic)
@@ -1009,7 +1020,7 @@ function renderFlatMap(features) {
   if(!mapContainer) return;
   
   // Add a defs section for the 3D bevel/gradient effect on the paths
-  const svgHeader = `<svg class="flat-map-svg" viewBox="0 0 1000 650" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+  const svgHeader = `<svg class="flat-map-svg" viewBox="0 0 1000 650" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" overflow="hidden">
     <defs>
       <filter id="bevel3d" x="-20%" y="-20%" width="140%" height="140%">
         <feDropShadow dx="3" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.8"/>
@@ -1035,7 +1046,10 @@ function renderFlatMap(features) {
     svgPaths += `<path id="path-geo-${idx}" class="map-country" fill="${fill}" data-country="${name || f.properties.NAME}"></path>`;
   });
   
-  mapContainer.innerHTML = svgHeader + svgPaths + '</svg>';
+  mapContainer.innerHTML = svgHeader +
+    `<g id="map-pan-group" transform="translate(0,0)">` +
+    svgPaths +
+    `</g></svg>`;
   
   // Cache for performance
   pathNodes = [];
@@ -1048,20 +1062,100 @@ function renderFlatMap(features) {
   // Interactivity
   document.querySelectorAll('.map-country').forEach(p => {
     p.addEventListener('click', (e) => {
-       // Mock UI update on click
-       const cName = e.target.getAttribute('data-country') || 'ASSET';
-       const title = document.getElementById('active-asset-title');
-       if (title) {
-           title.innerHTML = cName.substring(0, 10).toUpperCase() + ` <span style="opacity:0.4; font-size:10px;">/ USD</span>`;
-       }
-       generateChartData();
+      if (didPan) return; // respect pan guard
+      const cName = e.target.getAttribute('data-country') || 'ASSET';
+      const title = document.getElementById('active-asset-title');
+      if (title) {
+        title.innerHTML = cName.substring(0, 10).toUpperCase() +
+          ` <span style="opacity:0.4; font-size:10px;">/ USD</span>`;
+      }
+      generateChartData();
+      // Reveal right panel on flat map country click
+      const geoRight = document.querySelector('.geo-right-panel');
+      if (geoRight) geoRight.classList.remove('hidden');
     });
     // Removed hardcoded pointerEvents here. We handle it in animateUnroll.
   });
+
+  initMapPan();
   
   // Initially map is transparent
   mapContainer.style.opacity = '0';
   updateMapMorph(0);
+}
+
+let mapPanWinMove = null;
+let mapPanWinUp = null;
+let mapPanSvgDown = null;
+let mapPanSvgClickCap = null;
+let mapPanSvgEl = null;
+
+function initMapPan() {
+  const container = document.getElementById('svg-map-container');
+  const svg = container?.querySelector('svg');
+  const panGroup = document.getElementById('map-pan-group');
+  if (!container || !svg || !panGroup) return;
+
+  if (mapPanWinMove) {
+    window.removeEventListener('mousemove', mapPanWinMove);
+    window.removeEventListener('mouseup', mapPanWinUp);
+  }
+  if (mapPanSvgEl) {
+    mapPanSvgEl.removeEventListener('mousedown', mapPanSvgDown);
+    mapPanSvgEl.removeEventListener('click', mapPanSvgClickCap, true);
+  }
+
+  panOffset = { x: 0, y: 0 };
+  isPanning = false;
+  didPan = false;
+  panGroup.setAttribute('transform', 'translate(0,0)');
+  svg.style.cursor = 'grab';
+
+  let dragStartClientX = 0;
+  let dragStartClientY = 0;
+
+  mapPanSvgDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isPanning = true;
+    didPan = false;
+    panStart.x = e.clientX - panOffset.x;
+    panStart.y = e.clientY - panOffset.y;
+    dragStartClientX = e.clientX;
+    dragStartClientY = e.clientY;
+    svg.style.cursor = 'grabbing';
+  };
+
+  mapPanWinMove = (e) => {
+    if (!isPanning) return;
+    const dist = Math.hypot(e.clientX - dragStartClientX, e.clientY - dragStartClientY);
+    if (dist > 4) didPan = true;
+    let x = e.clientX - panStart.x;
+    let y = e.clientY - panStart.y;
+    x = Math.max(-400, Math.min(400, x));
+    y = Math.max(-250, Math.min(250, y));
+    panOffset.x = x;
+    panOffset.y = y;
+    panGroup.setAttribute('transform', `translate(${panOffset.x},${panOffset.y})`);
+  };
+
+  mapPanWinUp = () => {
+    if (!isPanning) return;
+    isPanning = false;
+    svg.style.cursor = 'grab';
+  };
+
+  mapPanSvgClickCap = (e) => {
+    if (!didPan) return;
+    e.stopPropagation();
+    didPan = false;
+  };
+
+  svg.addEventListener('mousedown', mapPanSvgDown);
+  window.addEventListener('mousemove', mapPanWinMove);
+  window.addEventListener('mouseup', mapPanWinUp);
+  svg.addEventListener('click', mapPanSvgClickCap, true);
+  mapPanSvgEl = svg;
 }
 
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
@@ -1115,6 +1209,9 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
         if (!entry) return;
         setSelectedCountry(entry);
         showGeoView();
+        // Reveal the right panel on country click
+        const geoRight = document.querySelector('.geo-right-panel');
+        if (geoRight) geoRight.classList.remove('hidden');
       });
 
     // Point interaction
@@ -1147,17 +1244,29 @@ lenis.on('scroll', (e) => {
   if (progress < 0) progress = 0;
   targetProgress = progress;
   
-  // Top nav active state sync immediately
-  if(progress > 0.5 && activeView !== 'geo'){
-    activeView = 'geo';
-    document.querySelectorAll('.top-nav .tab').forEach(t=>t.classList.remove('active'));
-    const b = document.querySelector('.top-nav .tab[data-target="geo"]');
-    if(b) b.classList.add('active');
-  } else if (progress <= 0.5 && activeView !== 'earth') {
-    activeView = 'earth';
-    document.querySelectorAll('.top-nav .tab').forEach(t=>t.classList.remove('active'));
-    const b = document.querySelector('.top-nav .tab[data-target="earth"]');
-    if(b) b.classList.add('active');
+  // Top nav active state: which view-section contains the viewport center (earth/geo breakpoint unchanged in practice)
+  const anchorY = h * 0.5;
+  let navTarget = 'earth';
+  const viewOrder = [
+    ['earth-view', 'earth'],
+    ['geo-view', 'geo'],
+    ['trade-view', 'signals'],
+    ['portfolio-view', 'portfolio'],
+  ];
+  for (const [id, target] of viewOrder) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const rect = el.getBoundingClientRect();
+    if (anchorY >= rect.top && anchorY < rect.bottom) {
+      navTarget = target;
+      break;
+    }
+  }
+  if (navTarget !== activeView) {
+    activeView = navTarget;
+    document.querySelectorAll('.top-nav .tab').forEach((t) => t.classList.remove('active'));
+    const b = document.querySelector(`.top-nav .tab[data-target="${navTarget}"]`);
+    if (b) b.classList.add('active');
   }
 });
 
@@ -1271,7 +1380,10 @@ tl.from('.top-nav', { y: -50, opacity: 0, duration: 0.8, ease: "power3.out" })
   // Slide in left panel
   .from('.slide-in-left', { x: -50, opacity: 0, duration: 0.6, ease: "power2.out"}, "-=0.4")
   // Slide in right panel
-  .from('.slide-in-right', { x: 50, opacity: 0, duration: 0.6, ease: "power2.out"}, "-=0.4")
+  .fromTo('.slide-in-right', 
+    { x: 50, opacity: 0 }, 
+    { x: 0, opacity: 1, duration: 0.6, ease: "power2.out" },
+  "-=0.4")
   // Slide up bottom panel
   .from('.bottom-panel', { y: 50, opacity: 0, duration: 0.6, ease: "power2.out"}, "-=0.4")
   .from('.gti-box', { opacity: 0, y: -10, duration: 0.4 }, '-=0.2')
@@ -1296,7 +1408,7 @@ function openPanel(panel, button) {
   panel.classList.remove('minimized');
   if (button) {
     const icon = button.querySelector('svg');
-    if (icon) icon.style.transform = 'rotate(0deg)';
+    if (icon) icon.style.transform = 'rotate(180deg)';
   }
 }
 
@@ -1305,7 +1417,7 @@ function togglePanel(panel, button) {
   panel.classList.toggle('minimized');
   if (button) {
     const icon = button.querySelector('svg');
-    if (icon) icon.style.transform = panel.classList.contains('minimized') ? 'rotate(180deg)' : 'rotate(0deg)';
+    if (icon) icon.style.transform = panel.classList.contains('minimized') ? 'rotate(0deg)' : 'rotate(180deg)';
   }
 }
 
@@ -1582,70 +1694,7 @@ function generateCandles(basePrice, count = 60) {
 }
 
 function drawCandlestickChart(canvasId, candles) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const padding = { top: 10, bottom: 10, left: 8, right: 8 };
-  const chartW = W - padding.left - padding.right;
-  const chartH = H - padding.top - padding.bottom;
-
-  const prices = candles.flatMap((c) => [c.high, c.low]);
-  const minP = Math.min(...prices);
-  const maxP = Math.max(...prices);
-  const priceRange = maxP - minP || 1;
-
-  const toY = (p) => padding.top + chartH - ((p - minP) / priceRange) * chartH;
-  const candleW = Math.max(2, Math.floor(chartW / candles.length) - 1);
-  const gap = Math.floor(chartW / candles.length);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {
-    const y = padding.top + (chartH / 4) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(W - padding.right, y);
-    ctx.stroke();
-  }
-
-  candles.forEach((c, i) => {
-    const x = padding.left + i * gap + gap / 2;
-    const isUp = c.close >= c.open;
-    const color = isUp ? '#22c55e' : '#ef4444';
-    const openY = toY(c.open);
-    const closeY = toY(c.close);
-    const highY = toY(c.high);
-    const lowY = toY(c.low);
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, highY);
-    ctx.lineTo(x, lowY);
-    ctx.stroke();
-
-    const bodyTop = Math.min(openY, closeY);
-    const bodyH = Math.max(1, Math.abs(closeY - openY));
-    ctx.fillStyle = color;
-    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
-  });
-
-  const lastClose = candles[candles.length - 1].close;
-  const lineY = toY(lastClose);
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, lineY);
-  ctx.lineTo(W - padding.right, lineY);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  return candles;
+  return mountLightweightCandlestickFromCanvas(canvasId, candles, 'lw-chart-div');
 }
 
 function updateOHLC(candles) {

@@ -1,6 +1,7 @@
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 import { lenis } from './main.js';
+import { mountLightweightCandlestickFromCanvas } from './lightweightCandleMount.js';
 
 /** Geo → Trade handoff context (mutable for future map integration). */
 export const tradeContext = {
@@ -141,91 +142,6 @@ function generateCandles(basePrice, count = 60) {
   return candles;
 }
 
-function drawTradeCandlestickChart(canvas, candles, geoMarkerIndex = 45) {
-  if (!canvas || !candles.length) return candles;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const padding = { top: 22, bottom: 10, left: 8, right: 8 };
-  const chartW = W - padding.left - padding.right;
-  const chartH = H - padding.top - padding.bottom;
-
-  const prices = candles.flatMap((c) => [c.high, c.low]);
-  const minP = Math.min(...prices);
-  const maxP = Math.max(...prices);
-  const priceRange = maxP - minP || 1;
-
-  const toY = (p) => padding.top + chartH - ((p - minP) / priceRange) * chartH;
-  const candleW = Math.max(2, Math.floor(chartW / candles.length) - 1);
-  const gap = Math.floor(chartW / candles.length);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {
-    const y = padding.top + (chartH / 4) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(W - padding.right, y);
-    ctx.stroke();
-  }
-
-  candles.forEach((c, i) => {
-    const x = padding.left + i * gap + gap / 2;
-    const isUp = c.close >= c.open;
-    const color = isUp ? '#22c55e' : '#ef4444';
-    const openY = toY(c.open);
-    const closeY = toY(c.close);
-    const highY = toY(c.high);
-    const lowY = toY(c.low);
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, highY);
-    ctx.lineTo(x, lowY);
-    ctx.stroke();
-
-    const bodyTop = Math.min(openY, closeY);
-    const bodyH = Math.max(1, Math.abs(closeY - openY));
-    ctx.fillStyle = color;
-    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
-  });
-
-  const lastClose = candles[candles.length - 1].close;
-  const lineY = toY(lastClose);
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, lineY);
-  ctx.lineTo(W - padding.right, lineY);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const mi = Math.min(Math.max(geoMarkerIndex, 0), candles.length - 1);
-  const mx = padding.left + mi * gap + gap / 2;
-  ctx.setLineDash([3, 4]);
-  ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(mx, padding.top);
-  ctx.lineTo(mx, H - padding.bottom);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.font = '10px monospace';
-  ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
-  const label = `Geo Trigger: ${tradeContext.country} Crude`;
-  const tw = ctx.measureText(label).width;
-  ctx.fillRect(mx + 4, padding.top - 2, tw + 8, 14);
-  ctx.fillStyle = '#0b0e14';
-  ctx.fillText(label, mx + 8, padding.top + 9);
-
-  return candles;
-}
-
 function computeRSI(closes, period = 14) {
   const rsiArr = new Array(closes.length).fill(null);
   if (closes.length < period + 1) {
@@ -312,15 +228,22 @@ function updateTradeOHLC(candles) {
 }
 
 function resizeTradeCanvases() {
+  const lwDiv = document.getElementById('lw-chart-div-trade');
   const candleEl = document.getElementById('trade-candle-chart');
   const rsiEl = document.getElementById('trade-rsi-chart');
-  if (!candleEl || !rsiEl) return;
-  const wrap = candleEl.closest('.trade-chart-block');
+  const anchor = lwDiv || candleEl;
+  if (!anchor || !rsiEl) return;
+  const wrap = anchor.closest('.trade-chart-block');
   const w = Math.max(320, Math.floor(wrap?.clientWidth || 640));
-  candleEl.width = w;
-  candleEl.height = 220;
-  candleEl.style.width = '100%';
-  candleEl.style.height = '220px';
+  if (candleEl && !lwDiv) {
+    candleEl.width = w;
+    candleEl.height = 220;
+    candleEl.style.width = '100%';
+    candleEl.style.height = '220px';
+  } else if (lwDiv) {
+    lwDiv.style.width = '100%';
+    lwDiv.style.height = '220px';
+  }
   rsiEl.width = w;
   rsiEl.height = 72;
   rsiEl.style.width = '100%';
@@ -440,7 +363,7 @@ function selectStock(ticker, flashTicket = true) {
 
   resizeTradeCanvases();
   const candles = generateCandles(stock.mockPrice, 60);
-  state.candles = drawTradeCandlestickChart(document.getElementById('trade-candle-chart'), candles, 45);
+  state.candles = mountLightweightCandlestickFromCanvas('trade-candle-chart', candles, 'lw-chart-div-trade');
   const closes = state.candles.map((c) => c.close);
   const rsi = computeRSI(closes, 14);
   drawRsiLine(document.getElementById('trade-rsi-chart'), rsi);
@@ -645,7 +568,7 @@ function clearTradeScrollAnimProps() {
   clearSel('#trade-watchlist');
   clearSel('#trade-col-center');
   clearSel('#trade-col-right');
-  clearSel('#trade-candle-chart');
+  clearSel('#lw-chart-div-trade');
   clearSel('#trade-watchlist .trade-wl-row');
   clearSel('#trade-fusion-bars .trade-fusion-bar-row');
   clearSel('#trade-col-right .ai-explainer');
@@ -667,7 +590,7 @@ function setupTradeScrollEntrances() {
   const wlRows = gsap.utils.toArray('#trade-watchlist .trade-wl-row');
   gsap.set(wlRows, { x: -20, opacity: 0 });
 
-  gsap.set('#trade-candle-chart', {
+  gsap.set('#lw-chart-div-trade', {
     opacity: 0,
     scaleY: 0.92,
     transformOrigin: '50% 100%',
@@ -723,7 +646,7 @@ function setupTradeScrollEntrances() {
     scrollTrigger: { ...st, start: 'top 80%' },
   });
 
-  gsap.to('#trade-candle-chart', {
+  gsap.to('#lw-chart-div-trade', {
     opacity: 1,
     scaleY: 1,
     duration: 0.62,

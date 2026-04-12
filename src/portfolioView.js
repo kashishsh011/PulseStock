@@ -1,6 +1,7 @@
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 import { lenis } from './main.js';
+import { mountLightweightCandlestickFromCanvas } from './lightweightCandleMount.js';
 
 const POSITIONS = [
   {
@@ -118,91 +119,6 @@ function generateCandles(basePrice, count = 60) {
   return candles;
 }
 
-function drawPortfolioCandlestickChart(canvas, candles, markerIndex = 45) {
-  if (!canvas || !candles.length) return candles;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const padding = { top: 22, bottom: 10, left: 8, right: 8 };
-  const chartW = W - padding.left - padding.right;
-  const chartH = H - padding.top - padding.bottom;
-
-  const prices = candles.flatMap((c) => [c.high, c.low]);
-  const minP = Math.min(...prices);
-  const maxP = Math.max(...prices);
-  const priceRange = maxP - minP || 1;
-
-  const toY = (p) => padding.top + chartH - ((p - minP) / priceRange) * chartH;
-  const candleW = Math.max(2, Math.floor(chartW / candles.length) - 1);
-  const gap = Math.floor(chartW / candles.length);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {
-    const y = padding.top + (chartH / 4) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(W - padding.right, y);
-    ctx.stroke();
-  }
-
-  candles.forEach((c, i) => {
-    const x = padding.left + i * gap + gap / 2;
-    const isUp = c.close >= c.open;
-    const color = isUp ? '#22c55e' : '#ef4444';
-    const openY = toY(c.open);
-    const closeY = toY(c.close);
-    const highY = toY(c.high);
-    const lowY = toY(c.low);
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, highY);
-    ctx.lineTo(x, lowY);
-    ctx.stroke();
-
-    const bodyTop = Math.min(openY, closeY);
-    const bodyH = Math.max(1, Math.abs(closeY - openY));
-    ctx.fillStyle = color;
-    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
-  });
-
-  const lastClose = candles[candles.length - 1].close;
-  const lineY = toY(lastClose);
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, lineY);
-  ctx.lineTo(W - padding.right, lineY);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const mi = Math.min(Math.max(markerIndex, 0), candles.length - 1);
-  const mx = padding.left + mi * gap + gap / 2;
-  ctx.setLineDash([3, 4]);
-  ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(mx, padding.top);
-  ctx.lineTo(mx, H - padding.bottom);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const label = 'Entry Zone';
-  ctx.font = '10px monospace';
-  ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
-  const tw = ctx.measureText(label).width;
-  ctx.fillRect(mx + 4, padding.top - 2, tw + 8, 14);
-  ctx.fillStyle = '#0b0e14';
-  ctx.fillText(label, mx + 8, padding.top + 9);
-
-  return candles;
-}
-
 function updatePortfolioOHLC(candles) {
   if (!candles?.length) return;
   const last = candles[candles.length - 1];
@@ -218,15 +134,22 @@ function updatePortfolioOHLC(candles) {
 }
 
 function resizePortfolioCanvases() {
+  const lwDiv = document.getElementById('lw-chart-div-portfolio');
   const candleEl = document.getElementById('portfolio-candle-chart');
   const ddEl = document.getElementById('port-drawdown-chart');
-  if (!candleEl) return;
-  const wrap = candleEl.closest('.port-chart-block');
+  const anchor = lwDiv || candleEl;
+  if (!anchor) return;
+  const wrap = anchor.closest('.port-chart-block');
   const w = Math.max(320, Math.floor(wrap?.clientWidth || 640));
-  candleEl.width = w;
-  candleEl.height = 220;
-  candleEl.style.width = '100%';
-  candleEl.style.height = '220px';
+  if (candleEl && !lwDiv) {
+    candleEl.width = w;
+    candleEl.height = 220;
+    candleEl.style.width = '100%';
+    candleEl.style.height = '220px';
+  } else if (lwDiv) {
+    lwDiv.style.width = '100%';
+    lwDiv.style.height = '220px';
+  }
   if (ddEl) {
     const rw = ddEl.parentElement?.clientWidth || w;
     ddEl.width = Math.max(280, rw - 32);
@@ -376,7 +299,7 @@ function selectPosition(ticker, flash = true) {
 
   resizePortfolioCanvases();
   const candles = generateCandles(stock.ltp, 60);
-  drawPortfolioCandlestickChart(document.getElementById('portfolio-candle-chart'), candles, 45);
+  mountLightweightCandlestickFromCanvas('portfolio-candle-chart', candles, 'lw-chart-div-portfolio');
   updatePortfolioOHLC(candles);
 
   const cost = stock.qty * stock.entry;
@@ -630,7 +553,7 @@ export function initPortfolioView() {
       resizePortfolioCanvases();
       const st = getPosition(selectedTicker);
       const candles = generateCandles(st.ltp, 60);
-      drawPortfolioCandlestickChart(document.getElementById('portfolio-candle-chart'), candles, 45);
+      mountLightweightCandlestickFromCanvas('portfolio-candle-chart', candles, 'lw-chart-div-portfolio');
       updatePortfolioOHLC(candles);
       drawDrawdownChart();
       ScrollTrigger.refresh();

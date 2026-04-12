@@ -365,7 +365,7 @@ button, .tab, .sub-tab, .region-btn, .stock-item, .map-country, .asset-card, inp
   max-height: none;
 }
 
-.right-panel .panel { width: 380px; min-width: 0; align-self: flex-start; overflow-x: hidden; }
+.right-panel .panel { width: 100%; max-width: 100%; box-sizing: border-box; min-width: 0; align-self: flex-start; overflow-x: hidden; }
 
 .main-signal-card {
   background: rgba(25, 30, 45, 0.85);
@@ -595,14 +595,14 @@ ul {
 }
 
 .signal-tag {
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 6px;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid var(--neon-amber);
-  max-width: 130px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -722,7 +722,7 @@ ul {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 55%;
+  max-width: 75%;
 }
 
 .panel-total {
@@ -1081,7 +1081,7 @@ ul {
   width: 380px;
   max-width: calc(100vw - 360px);
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 .left-panel .panel, .right-panel .panel {
   pointer-events: auto !important;
@@ -1170,7 +1170,7 @@ ul {
 .geo-right-panel {
   position: relative;
   z-index: 10;
-  width: 450px;
+  width: 680px;
   max-width: 100%;
   border-radius: 12px;
   padding: 24px;
@@ -1201,9 +1201,11 @@ ul {
 
 .asset-tabs-wrap {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 24px;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .asset-card {
@@ -1354,6 +1356,7 @@ path.map-country:hover { filter: brightness(1.5); }
 }
 
 #right-signal-panel .panel-content-wrap {
+  padding-top: 36px;
   padding-left: 12px;
   padding-right: 12px;
   padding-bottom: 16px;
@@ -1500,12 +1503,14 @@ path.map-country:hover { filter: brightness(1.5); }
 }
 
 .asset-card {
-  min-width: 80px;
-  padding: 10px 14px;
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow: hidden;
 }
 
 .a-ticker {
@@ -1513,6 +1518,9 @@ path.map-country:hover { filter: brightness(1.5); }
   color: #aab4c8;
   font-family: monospace;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .a-price-row {
@@ -1522,15 +1530,17 @@ path.map-country:hover { filter: brightness(1.5); }
 }
 
 .a-price {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   font-family: monospace;
   color: #f8fafc;
+  white-space: nowrap;
 }
 
 .a-pct {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .a-subtext {
