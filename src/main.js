@@ -7,6 +7,10 @@ import Lenis from '@studio-freight/lenis'
 import { calcFusionScore } from './engine/fusionEngine.js';
 import { getTensionByName, getTensionColor, getISOByName } from './data/countryTensionData.js';
 import { mountLightweightCandlestickFromCanvas } from './lightweightCandleMount.js';
+import { connectFinnhub, watchStock } from './finnhub.js';
+import { loadSectorStocks, loadGeoEvents } from './dataLoader.js';
+import { initTradeView } from './tradeView.js';
+import { initPortfolioView } from './portfolioView.js';
 
 // 1. Initialize Lenis for smooth scroll (even though UI is mostly fixed, good for any internal overflow)
 const lenis = new Lenis({
@@ -37,8 +41,8 @@ const globeContainer = document.getElementById('globeViz');
 
 const world = Globe()
   (globeContainer)
-  .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
-  .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+  .globeImageUrl('/earth-dark.jpg')
+  .bumpImageUrl('/earth-topology.png')
   .backgroundColor('rgba(0,0,0,0)');
 
 const geoEvents = [
@@ -62,7 +66,7 @@ world
   .pointLabel(d => `
     <div style="background:rgba(10,14,20,0.95);border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;max-width:220px;font-family:Inter,sans-serif">
       <div style="color:#f8fafc;font-size:12px;font-weight:500;margin-bottom:4px">${d.name}</div>
-      <div style="font-size:10px;padding:2px 6px;border-radius:4px;display:inline-block;margin-bottom:6px;background:${d.severity==='critical'?'rgba(239,68,68,0.15)':d.severity==='high'?'rgba(245,158,11,0.15)':'rgba(59,130,246,0.15)'};color:${d.color}">${d.severity.toUpperCase()}</div>
+      <div style="font-size:10px;padding:2px 6px;border-radius:4px;display:inline-block;margin-bottom:6px;background:${d.severity === 'critical' ? 'rgba(239,68,68,0.15)' : d.severity === 'high' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'};color:${d.color}">${d.severity.toUpperCase()}</div>
       <div style="color:rgba(255,255,255,0.5);font-size:11px;line-height:1.5">${d.impact}</div>
     </div>
   `);
@@ -110,7 +114,8 @@ const LANDING_DETAIL_TAB_IDS = {
 
 const sectorStocks = {
   "Banking": [
-    { name: "HDFC Bank",  ticker: "HDFCBANK",  score: 0.16,  label: "CONFLICTED",
+    {
+      name: "HDFC Bank", ticker: "HDFCBANK", score: 0.16, label: "CONFLICTED",
       breakdown: { F: 0.43, T: -0.14, N: 0.50, G: -0.30 },
       fundamental: { pe: 18.2, sectorPE: 20.1, roe: 16.5, npa: 1.2, revenueGrowth: 12, promoterHolding: 26.1 },
       technical: { rsi: 68, priceVsWMA: 0.8, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 1612.00, resistance: 1698.00 },
@@ -122,7 +127,8 @@ const sectorStocks = {
         { headline: "Banking sector cautious ahead of Fed policy decision", sentiment: "NEUTRAL", source: "Reuters", time: "12h ago" }
       ]
     },
-    { name: "SBI",        ticker: "SBIN",       score: 0.42,  label: "BULLISH",
+    {
+      name: "SBI", ticker: "SBIN", score: 0.42, label: "BULLISH",
       breakdown: { F: 0.30, T: 0.25, N: 0.20, G: -0.10 },
       fundamental: { pe: 9.1, sectorPE: 20.1, roe: 14.2, npa: 2.8, revenueGrowth: 8, promoterHolding: 57.5 },
       technical: { rsi: 55, priceVsWMA: 1.2, macd: "Bullish crossover", volumeTrend: "Increasing", support: 740.00, resistance: 812.00 },
@@ -134,7 +140,8 @@ const sectorStocks = {
         { headline: "Government may increase SBI stake says report", sentiment: "POSITIVE", source: "Reuters", time: "14h ago" }
       ]
     },
-    { name: "ICICI Bank", ticker: "ICICIBANK",  score: -0.21, label: "BEARISH",
+    {
+      name: "ICICI Bank", ticker: "ICICIBANK", score: -0.21, label: "BEARISH",
       breakdown: { F: -0.10, T: -0.30, N: -0.20, G: -0.30 },
       fundamental: { pe: 17.4, sectorPE: 20.1, roe: 15.1, npa: 1.8, revenueGrowth: 6, promoterHolding: 0 },
       technical: { rsi: 72, priceVsWMA: -0.5, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 1050.00, resistance: 1142.00 },
@@ -146,7 +153,8 @@ const sectorStocks = {
         { headline: "FII selling concentrated in ICICI and HDFC", sentiment: "NEGATIVE", source: "Reuters", time: "11h ago" }
       ]
     },
-    { name: "Axis Bank",  ticker: "AXISBANK",   score: 0.05,  label: "NEUTRAL",
+    {
+      name: "Axis Bank", ticker: "AXISBANK", score: 0.05, label: "NEUTRAL",
       breakdown: { F: 0.10, T: 0.05, N: 0.00, G: -0.10 },
       fundamental: { pe: 14.2, sectorPE: 20.1, roe: 13.8, npa: 1.5, revenueGrowth: 9, promoterHolding: 8.2 },
       technical: { rsi: 51, priceVsWMA: 0.2, macd: "Neutral", volumeTrend: "Stable", support: 1020.00, resistance: 1105.00 },
@@ -158,7 +166,8 @@ const sectorStocks = {
         { headline: "Banking index flat as global cues mixed", sentiment: "NEUTRAL", source: "Reuters", time: "15h ago" }
       ]
     },
-    { name: "Kotak Bank", ticker: "KOTAKBANK",  score: 0.31,  label: "LEANING BULLISH",
+    {
+      name: "Kotak Bank", ticker: "KOTAKBANK", score: 0.31, label: "LEANING BULLISH",
       breakdown: { F: 0.40, T: 0.20, N: 0.30, G: -0.20 },
       fundamental: { pe: 20.1, sectorPE: 20.1, roe: 17.2, npa: 0.8, revenueGrowth: 15, promoterHolding: 25.9 },
       technical: { rsi: 62, priceVsWMA: 1.8, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1740.00, resistance: 1890.00 },
@@ -172,7 +181,8 @@ const sectorStocks = {
     }
   ],
   "IT": [
-    { name: "TCS",        ticker: "TCS",       score: 0.38,  label: "BULLISH",
+    {
+      name: "TCS", ticker: "TCS", score: 0.38, label: "BULLISH",
       breakdown: { F: 0.50, T: 0.30, N: 0.25, G: -0.10 },
       fundamental: { pe: 28.4, sectorPE: 30.2, roe: 44.1, npa: 0, revenueGrowth: 11, promoterHolding: 72.3 },
       technical: { rsi: 58, priceVsWMA: 1.5, macd: "Bullish crossover", volumeTrend: "Increasing", support: 3680.00, resistance: 3950.00 },
@@ -184,7 +194,8 @@ const sectorStocks = {
         { headline: "AI-related deals driving demand for IT services globally", sentiment: "POSITIVE", source: "Reuters", time: "12h ago" }
       ]
     },
-    { name: "Infosys",    ticker: "INFY",      score: 0.22,  label: "LEANING BULLISH",
+    {
+      name: "Infosys", ticker: "INFY", score: 0.22, label: "LEANING BULLISH",
       breakdown: { F: 0.35, T: 0.15, N: 0.20, G: -0.10 },
       fundamental: { pe: 24.8, sectorPE: 30.2, roe: 31.7, npa: 0, revenueGrowth: 9, promoterHolding: 14.9 },
       technical: { rsi: 55, priceVsWMA: 0.9, macd: "Bullish crossover", volumeTrend: "Stable", support: 1520.00, resistance: 1680.00 },
@@ -196,7 +207,8 @@ const sectorStocks = {
         { headline: "Global IT spending slowdown risk from macro uncertainty", sentiment: "NEUTRAL", source: "Reuters", time: "14h ago" }
       ]
     },
-    { name: "Wipro",      ticker: "WIPRO",     score: -0.08, label: "NEUTRAL",
+    {
+      name: "Wipro", ticker: "WIPRO", score: -0.08, label: "NEUTRAL",
       breakdown: { F: 0.05, T: -0.10, N: -0.15, G: -0.10 },
       fundamental: { pe: 22.1, sectorPE: 30.2, roe: 15.2, npa: 0, revenueGrowth: 4, promoterHolding: 72.9 },
       technical: { rsi: 48, priceVsWMA: -0.3, macd: "Neutral", volumeTrend: "Decreasing", support: 445.00, resistance: 510.00 },
@@ -208,7 +220,8 @@ const sectorStocks = {
         { headline: "IT sector outlook cautious as BFSI clients cut budgets", sentiment: "NEUTRAL", source: "Reuters", time: "15h ago" }
       ]
     },
-    { name: "HCL Tech",   ticker: "HCLTECH",   score: 0.45,  label: "BULLISH",
+    {
+      name: "HCL Tech", ticker: "HCLTECH", score: 0.45, label: "BULLISH",
       breakdown: { F: 0.55, T: 0.40, N: 0.30, G: -0.10 },
       fundamental: { pe: 26.3, sectorPE: 30.2, roe: 22.8, npa: 0, revenueGrowth: 14, promoterHolding: 60.8 },
       technical: { rsi: 63, priceVsWMA: 2.1, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1580.00, resistance: 1750.00 },
@@ -220,7 +233,8 @@ const sectorStocks = {
         { headline: "Analysts upgrade HCL Tech on strong deal pipeline", sentiment: "POSITIVE", source: "Reuters", time: "13h ago" }
       ]
     },
-    { name: "Tech M",     ticker: "TECHM",     score: -0.18, label: "BEARISH",
+    {
+      name: "Tech M", ticker: "TECHM", score: -0.18, label: "BEARISH",
       breakdown: { F: -0.15, T: -0.20, N: -0.15, G: -0.10 },
       fundamental: { pe: 38.9, sectorPE: 30.2, roe: 8.4, npa: 0, revenueGrowth: 2, promoterHolding: 35.1 },
       technical: { rsi: 71, priceVsWMA: -1.2, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 1190.00, resistance: 1340.00 },
@@ -234,7 +248,8 @@ const sectorStocks = {
     }
   ],
   "Pharma": [
-    { name: "Sun Pharma",  ticker: "SUNPHARMA", score: 0.52,  label: "BULLISH",
+    {
+      name: "Sun Pharma", ticker: "SUNPHARMA", score: 0.52, label: "BULLISH",
       breakdown: { F: 0.60, T: 0.45, N: 0.40, G: 0.10 },
       fundamental: { pe: 34.2, sectorPE: 32.0, roe: 18.4, npa: 0, revenueGrowth: 16, promoterHolding: 54.5 },
       technical: { rsi: 61, priceVsWMA: 2.8, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1420.00, resistance: 1610.00 },
@@ -246,7 +261,8 @@ const sectorStocks = {
         { headline: "Pharma sector benefits from easing raw material costs", sentiment: "POSITIVE", source: "Reuters", time: "12h ago" }
       ]
     },
-    { name: "Dr. Reddy's", ticker: "DRREDDY",   score: 0.28,  label: "LEANING BULLISH",
+    {
+      name: "Dr. Reddy's", ticker: "DRREDDY", score: 0.28, label: "LEANING BULLISH",
       breakdown: { F: 0.40, T: 0.20, N: 0.25, G: 0.05 },
       fundamental: { pe: 19.8, sectorPE: 32.0, roe: 21.3, npa: 0, revenueGrowth: 13, promoterHolding: 26.6 },
       technical: { rsi: 57, priceVsWMA: 1.1, macd: "Bullish crossover", volumeTrend: "Stable", support: 5620.00, resistance: 6200.00 },
@@ -258,7 +274,8 @@ const sectorStocks = {
         { headline: "Generic drug pricing stable in US market in Q4", sentiment: "NEUTRAL", source: "Reuters", time: "14h ago" }
       ]
     },
-    { name: "Cipla",       ticker: "CIPLA",     score: 0.14,  label: "NEUTRAL",
+    {
+      name: "Cipla", ticker: "CIPLA", score: 0.14, label: "NEUTRAL",
       breakdown: { F: 0.20, T: 0.10, N: 0.10, G: 0.00 },
       fundamental: { pe: 26.5, sectorPE: 32.0, roe: 14.8, npa: 0, revenueGrowth: 8, promoterHolding: 33.5 },
       technical: { rsi: 53, priceVsWMA: 0.4, macd: "Neutral", volumeTrend: "Stable", support: 1230.00, resistance: 1390.00 },
@@ -270,7 +287,8 @@ const sectorStocks = {
         { headline: "India pharma exports stable despite logistics challenges", sentiment: "NEUTRAL", source: "Reuters", time: "15h ago" }
       ]
     },
-    { name: "Divis Lab",   ticker: "DIVISLAB",  score: -0.12, label: "BEARISH",
+    {
+      name: "Divis Lab", ticker: "DIVISLAB", score: -0.12, label: "BEARISH",
       breakdown: { F: -0.05, T: -0.20, N: -0.10, G: -0.10 },
       fundamental: { pe: 58.1, sectorPE: 32.0, roe: 16.2, npa: 0, revenueGrowth: -4, promoterHolding: 51.9 },
       technical: { rsi: 68, priceVsWMA: -0.8, macd: "Bearish crossover", volumeTrend: "Decreasing", support: 3450.00, resistance: 3900.00 },
@@ -282,7 +300,8 @@ const sectorStocks = {
         { headline: "China API supply normalizing, reduces India's pricing power", sentiment: "NEGATIVE", source: "Reuters", time: "14h ago" }
       ]
     },
-    { name: "Lupin",       ticker: "LUPIN",     score: 0.33,  label: "LEANING BULLISH",
+    {
+      name: "Lupin", ticker: "LUPIN", score: 0.33, label: "LEANING BULLISH",
       breakdown: { F: 0.40, T: 0.30, N: 0.25, G: 0.00 },
       fundamental: { pe: 29.7, sectorPE: 32.0, roe: 12.1, npa: 0, revenueGrowth: 18, promoterHolding: 46.9 },
       technical: { rsi: 59, priceVsWMA: 1.7, macd: "Bullish crossover", volumeTrend: "Increasing", support: 1680.00, resistance: 1890.00 },
@@ -308,11 +327,11 @@ const sectorCountryMap = {
 
 const regionCoordinates = {
   all: { lat: 20, lng: 0 },
-  me:  { lat: 25, lng: 45 },
-  eu:  { lat: 50, lng: 10 },
-  ap:  { lat: 20, lng: 100 },
-  us:  { lat: 20, lng: -80 },
-  af:  { lat: 0,  lng: 20 }
+  me: { lat: 25, lng: 45 },
+  eu: { lat: 50, lng: 10 },
+  ap: { lat: 20, lng: 100 },
+  us: { lat: 20, lng: -80 },
+  af: { lat: 0, lng: 20 }
 };
 
 function getCountryISO(feature) {
@@ -469,15 +488,15 @@ function renderDetailTabContent() {
       </div>
       <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
         <span style="color:#94a3b8;font-size:12px;font-family:monospace;">ROE</span>
-        <span style="color:${colorFor(f.roe,'roe')};font-size:13px;font-family:monospace;">${f.roe}%</span>
+        <span style="color:${colorFor(f.roe, 'roe')};font-size:13px;font-family:monospace;">${f.roe}%</span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
         <span style="color:#94a3b8;font-size:12px;font-family:monospace;">NPA</span>
-        <span style="color:${colorFor(f.npa,'npa')};font-size:13px;font-family:monospace;">${f.npa}%</span>
+        <span style="color:${colorFor(f.npa, 'npa')};font-size:13px;font-family:monospace;">${f.npa}%</span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e2e;">
         <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Revenue Growth</span>
-        <span style="color:${colorFor(f.revenueGrowth,'revenueGrowth')};font-size:13px;font-family:monospace;">${f.revenueGrowth}%</span>
+        <span style="color:${colorFor(f.revenueGrowth, 'revenueGrowth')};font-size:13px;font-family:monospace;">${f.revenueGrowth}%</span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:10px 0;">
         <span style="color:#94a3b8;font-size:12px;font-family:monospace;">Promoter Holding</span>
@@ -556,8 +575,8 @@ function renderGeoRightPanel() {
     const scoreColor = getScoreColor(selectedStock.score);
     const scoreFill = Math.min(50, Math.abs(selectedStock.score) * 50);
     const scoreLeft = selectedStock.score >= 0 ? 50 : 50 - scoreFill;
-    const tabButtons = ['Overall','Fundamental','Technical','News AI'].map(tab => `
-      <button data-action="detail-tab" data-tab="${tab}" style="flex:1;padding:10px 0;border:none;background:none;color:${detailTab===tab ? '#fff' : '#94a3b8'};border-bottom:3px solid ${detailTab===tab ? '#4ade80' : 'transparent'};font-family:monospace;font-size:12px;cursor:pointer;">${tab}</button>
+    const tabButtons = ['Overall', 'Fundamental', 'Technical', 'News AI'].map(tab => `
+      <button data-action="detail-tab" data-tab="${tab}" style="flex:1;padding:10px 0;border:none;background:none;color:${detailTab === tab ? '#fff' : '#94a3b8'};border-bottom:3px solid ${detailTab === tab ? '#4ade80' : 'transparent'};font-family:monospace;font-size:12px;cursor:pointer;">${tab}</button>
     `).join('');
     html += `
       <div style="padding-bottom:12px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;justify-content:space-between;gap:12px;">
@@ -639,7 +658,7 @@ function ensureGeoRightPanel() {
   wireGeoMapChromeOnce();
   // Hide right panel by default — only shown on country click
   const geoRight = document.querySelector('.geo-right-panel');
-  if (geoRight) geoRight.classList.add('hidden');
+  if (geoRight) geoRight.classList.remove('hidden');
 }
 
 function wireGeoMapChromeOnce() {
@@ -954,15 +973,14 @@ function getCountryName(feature) {
 function projectMorph(lng, lat, progress, centerLng) {
   // FLAT target (Mercator, adjusted for SVG viewport)
   const xf = (lng + 180) * (1000 / 360) * 0.95 + 10;
-  const latRad = lat * Math.PI / 180;
-  // Clamp latitude only for Mercator — poles are singular; skipping vertices broke whole countries.
   const latMerc = Math.max(-85.05112878, Math.min(85.05112878, lat));
   const latRadMerc = latMerc * Math.PI / 180;
   const mercN = Math.log(Math.tan((Math.PI / 4) + (latRadMerc / 2)));
   const yf = Math.max(-1000, Math.min(1500, (650 / 2) - (1000 * mercN / (2 * Math.PI)))) * 1.1 - 40;
 
   // SPHERE target (Orthographic)
-  const R = 300; 
+  const R = 300;
+  const latRad = lat * Math.PI / 180;
   let dLng = lng - centerLng;
   while (dLng > 180) dLng -= 360;
   while (dLng < -180) dLng += 360;
@@ -970,19 +988,18 @@ function projectMorph(lng, lat, progress, centerLng) {
 
   // Fold back-face to avoid messy crisscrosses at start
   if (progress < 0.05 && Math.cos(rLng) < 0) {
-      rLng = Math.sign(rLng) * Math.PI/2; 
+    rLng = Math.sign(rLng) * Math.PI / 2;
   } else if (progress < 1) {
-      if (Math.cos(rLng) < 0) {
-         const edgeLng = Math.sign(rLng) * Math.PI/2;
-         rLng = edgeLng + (rLng - edgeLng) * Math.pow(progress, 0.4); 
-      }
+    if (Math.cos(rLng) < 0) {
+      const edgeLng = Math.sign(rLng) * Math.PI / 2;
+      rLng = edgeLng + (rLng - edgeLng) * Math.pow(progress, 0.4);
+    }
   }
-  
+
   const xs = 500 + R * Math.cos(latRad) * Math.sin(rLng);
-  // Subtract Y due to SVG coordinates being flipped vs Cartesian
   const ys = 325 - R * Math.sin(latRad);
 
-  // Easing curve (smooth step) - quicker mid-section for punchier feel
+  // Easing curve (smooth step)
   const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
   const x = xs + (xf - xs) * ease;
@@ -991,35 +1008,34 @@ function projectMorph(lng, lat, progress, centerLng) {
 }
 
 function updateMapMorph(progress) {
-  for(let i=0; i<pathNodes.length; i++) {
-     let f = pathNodes[i].feature;
-     let d = '';
-     if (!f.geometry || !f.geometry.coordinates) continue;
-     
-     if (f.geometry.type === 'Polygon') {
-        d += 'M ';
-        f.geometry.coordinates[0].forEach((pt, idx) => {
-           const [x,y] = projectMorph(pt[0], pt[1], progress, capturedCenterLng);
-           d += `${x},${y} ${idx === f.geometry.coordinates[0].length-1 ? 'Z' : 'L '}`;
+  for (let i = 0; i < pathNodes.length; i++) {
+    let f = pathNodes[i].feature;
+    let d = '';
+    if (!f.geometry || !f.geometry.coordinates) continue;
+
+    if (f.geometry.type === 'Polygon') {
+      d += 'M ';
+      f.geometry.coordinates[0].forEach((pt, idx) => {
+        const [x, y] = projectMorph(pt[0], pt[1], progress, capturedCenterLng);
+        d += `${x},${y} ${idx === f.geometry.coordinates[0].length - 1 ? 'Z' : 'L '}`;
+      });
+    } else if (f.geometry.type === 'MultiPolygon') {
+      f.geometry.coordinates.forEach(poly => {
+        d += ' M ';
+        poly[0].forEach((pt, idx) => {
+          const [x, y] = projectMorph(pt[0], pt[1], progress, capturedCenterLng);
+          d += `${x},${y} ${idx === poly[0].length - 1 ? 'Z' : 'L '}`;
         });
-     } else if (f.geometry.type === 'MultiPolygon') {
-        f.geometry.coordinates.forEach(poly => {
-           d += ' M ';
-           poly[0].forEach((pt, idx) => {
-              const [x,y] = projectMorph(pt[0], pt[1], progress, capturedCenterLng);
-              d += `${x},${y} ${idx === poly[0].length-1 ? 'Z' : 'L '}`;
-           });
-        });
-     }
-     pathNodes[i].node.setAttribute('d', d);
+      });
+    }
+    pathNodes[i].node.setAttribute('d', d);
   }
 }
 
 function renderFlatMap(features) {
   const mapContainer = document.getElementById('svg-map-container');
-  if(!mapContainer) return;
-  
-  // Add a defs section for the 3D bevel/gradient effect on the paths
+  if (!mapContainer) return;
+
   const svgHeader = `<svg class="flat-map-svg" viewBox="0 0 1000 650" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" overflow="hidden">
     <defs>
       <filter id="bevel3d" x="-20%" y="-20%" width="140%" height="140%">
@@ -1031,26 +1047,24 @@ function renderFlatMap(features) {
         <stop offset="100%" stop-color="rgba(255,255,255,0.02)"/>
       </radialGradient>
     </defs>
-    <!-- Background circle that mimics the globe's ocean when progress=0 -->
     <circle id="ocean-bg" cx="500" cy="325" r="300" fill="url(#oceanGlow)" opacity="1"/>
   `;
   let svgPaths = '';
-  
+
   features.forEach((f, idx) => {
     if (!f.geometry || !f.geometry.coordinates) return;
     const name = getCountryName(f);
     const entry = getTensionByName(name);
     const baseColor = entry ? getTensionColor(entry.score) : (countryColors[f.properties.NAME] || countryColors[f.properties.ADMIN]);
     const fill = baseColor ? baseColor : 'rgba(200, 200, 200, 0.08)';
-    // Removed the slow SVG filter="url(#bevel3d)" entirely from paths. 
     svgPaths += `<path id="path-geo-${idx}" class="map-country" fill="${fill}" data-country="${name || f.properties.NAME}"></path>`;
   });
-  
+
   mapContainer.innerHTML = svgHeader +
     `<g id="map-pan-group" transform="translate(0,0)">` +
     svgPaths +
     `</g></svg>`;
-  
+
   // Cache for performance
   pathNodes = [];
   features.forEach((f, idx) => {
@@ -1058,11 +1072,11 @@ function renderFlatMap(features) {
     const node = document.getElementById(`path-geo-${idx}`);
     if (node) pathNodes.push({ node, feature: f });
   });
-  
+
   // Interactivity
   document.querySelectorAll('.map-country').forEach(p => {
     p.addEventListener('click', (e) => {
-      if (didPan) return; // respect pan guard
+      if (didPan) return;
       const cName = e.target.getAttribute('data-country') || 'ASSET';
       const title = document.getElementById('active-asset-title');
       if (title) {
@@ -1070,16 +1084,13 @@ function renderFlatMap(features) {
           ` <span style="opacity:0.4; font-size:10px;">/ USD</span>`;
       }
       generateChartData();
-      // Reveal right panel on flat map country click
       const geoRight = document.querySelector('.geo-right-panel');
       if (geoRight) geoRight.classList.remove('hidden');
     });
-    // Removed hardcoded pointerEvents here. We handle it in animateUnroll.
   });
 
   initMapPan();
-  
-  // Initially map is transparent
+
   mapContainer.style.opacity = '0';
   updateMapMorph(0);
 }
@@ -1175,7 +1186,6 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
         const isSelected = selectedCountry && selectedCountry.name === name;
         if (d === hoverD) return entry ? getTensionColor(entry.score) + 'aa' : 'rgba(58, 125, 68, 0.42)';
         if (isSelected) return entry ? getTensionColor(entry.score) + 'cc' : 'rgba(58, 125, 68, 0.28)';
-        // Sector-based highlighting
         if (selectedSector && sectorCountryMap[selectedSector]) {
           const relevantIsos = sectorCountryMap[selectedSector];
           if (iso && relevantIsos.includes(iso)) {
@@ -1209,18 +1219,15 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
         if (!entry) return;
         setSelectedCountry(entry);
         showGeoView();
-        // Reveal the right panel on country click
         const geoRight = document.querySelector('.geo-right-panel');
         if (geoRight) geoRight.classList.remove('hidden');
       });
 
-    // Point interaction
     world.onPointClick(d => {
-       world.pointOfView({ lat: d.lat, lng: d.lng, altitude: 1 }, 1000);
-       generateChartData(); // Mock signal data change
+      world.pointOfView({ lat: d.lat, lng: d.lng, altitude: 1 }, 1000);
+      generateChartData();
     });
-      
-    // Render the SPA flat map version
+
     renderFlatMap(globeFeatures);
   });
 
@@ -1231,20 +1238,19 @@ world.controls().autoRotateSpeed = 0.5;
 // Prevent zooming for SPA layout consistency
 world.controls().enableZoom = false;
 
-// Custom SPA scroll transitions: Unrolling the Earth
+// Custom SPA scroll transitions
 let activeView = 'earth';
 let targetProgress = 0;
 let currentProgress = 0;
-let lastComputedAnim = -1; // Cache tracker to prevent infinite CPU rendering
+let lastComputedAnim = -1;
 
 lenis.on('scroll', (e) => {
   const h = window.innerHeight;
-  let progress = e.scroll / h; 
+  let progress = e.scroll / h;
   if (progress > 1) progress = 1;
   if (progress < 0) progress = 0;
   targetProgress = progress;
-  
-  // Top nav active state: which view-section contains the viewport center (earth/geo breakpoint unchanged in practice)
+
   const anchorY = h * 0.5;
   let navTarget = 'earth';
   const viewOrder = [
@@ -1270,133 +1276,119 @@ lenis.on('scroll', (e) => {
   }
 });
 
-// Decoupled Animation Loop for silky smooth unfolding
 function animateUnroll() {
   if (Math.abs(targetProgress - currentProgress) > 0.001) {
-      // Much faster catch-up so it feels tightly bound to the mouse wheel
-      currentProgress += (targetProgress - currentProgress) * 0.35;
+    currentProgress += (targetProgress - currentProgress) * 0.35;
   } else {
-      currentProgress = targetProgress;
+    currentProgress = targetProgress;
   }
-  
-  // Accelerate the visual unroll so it finishes by ~75% of the scroll down
+
   let computedAnim = currentProgress * 1.35;
   if (computedAnim > 1) computedAnim = 1;
 
   const svgMap = document.getElementById('svg-map-container');
   const globeCanvas = document.getElementById('globeViz');
-  
+
   if (computedAnim > 0 && capturedCenterLng === 0) {
-      capturedCenterLng = world.pointOfView().lng || 0;
-      world.controls().autoRotate = false;
+    capturedCenterLng = world.pointOfView().lng || 0;
+    world.controls().autoRotate = false;
   }
   if (computedAnim <= 0) {
-      world.controls().autoRotate = true;
-      capturedCenterLng = 0; 
+    world.controls().autoRotate = true;
+    capturedCenterLng = 0;
   }
-  
-  // Removed altitude zooming so the globe remains perfectly static during the crossfade
-  // Optical illusion crossfade
-  const crossfadeRange = 0.25; // Blend over slightly more scroll for butter smoothness
+
+  const crossfadeRange = 0.25;
   let gOp = 1 - (computedAnim / crossfadeRange);
-  let sOp = computedAnim / (crossfadeRange * 0.5); 
-  
+  let sOp = computedAnim / (crossfadeRange * 0.5);
+
   if (gOp < 0) gOp = 0;
   if (sOp > 1) sOp = 1;
-  
-  if(globeCanvas && globeCanvas.style.opacity !== gOp.toFixed(3)) globeCanvas.style.opacity = gOp.toFixed(3);
-  if(svgMap && svgMap.style.opacity !== sOp.toFixed(3)) svgMap.style.opacity = sOp.toFixed(3);
-  
-  // Perform the intense recalculation ONLY if state changed!
+
+  if (globeCanvas && globeCanvas.style.opacity !== gOp.toFixed(3)) globeCanvas.style.opacity = gOp.toFixed(3);
+  if (svgMap && svgMap.style.opacity !== sOp.toFixed(3)) svgMap.style.opacity = sOp.toFixed(3);
+
   if (computedAnim !== lastComputedAnim) {
-      if (computedAnim > 0 && pathNodes.length > 0) {
-         updateMapMorph(computedAnim);
-         
-         const oceanBg = document.getElementById('ocean-bg');
-         if (oceanBg) {
-            oceanBg.setAttribute('opacity', (1 - (computedAnim * 2)).toFixed(2));
-         }
+    if (computedAnim > 0 && pathNodes.length > 0) {
+      updateMapMorph(computedAnim);
+
+      const oceanBg = document.getElementById('ocean-bg');
+      if (oceanBg) {
+        oceanBg.setAttribute('opacity', (1 - (computedAnim * 2)).toFixed(2));
       }
-      
-      // Dynamic CSS hardware-accelerated DropShadow toggled only when completely flat
-      if (svgMap) {
-         if (computedAnim >= 1) {
-            svgMap.style.filter = 'drop-shadow(2px 5px 6px rgba(0,0,0,0.4))';
-         } else {
-            svgMap.style.filter = 'none';
-         }
-         
-         // Fix Invisible Hitbox Blocker:
-         // The SVG paths MUST be unclickable when globe is visible, otherwise they block everything below them!
-         if (sOp <= 0.02) {
-            svgMap.style.visibility = 'hidden';
-            svgMap.style.pointerEvents = 'none';
-            const svgEl = svgMap.querySelector('svg');
-            if(svgEl) svgEl.style.pointerEvents = 'none';
-         } else {
-            svgMap.style.visibility = 'visible';
-            svgMap.style.pointerEvents = 'auto';
-            const svgEl = svgMap.querySelector('svg');
-            if(svgEl) svgEl.style.pointerEvents = 'auto';
-            document.querySelectorAll('.map-country').forEach(p => p.style.pointerEvents = 'auto');
-         }
+    }
+
+    if (svgMap) {
+      if (computedAnim >= 1) {
+        svgMap.style.filter = 'drop-shadow(2px 5px 6px rgba(0,0,0,0.4))';
+      } else {
+        svgMap.style.filter = 'none';
       }
-      lastComputedAnim = computedAnim;
+
+      if (sOp <= 0.02) {
+        svgMap.style.visibility = 'hidden';
+        svgMap.style.pointerEvents = 'none';
+        const svgEl = svgMap.querySelector('svg');
+        if (svgEl) svgEl.style.pointerEvents = 'none';
+      } else {
+        svgMap.style.visibility = 'visible';
+        svgMap.style.pointerEvents = 'auto';
+        const svgEl = svgMap.querySelector('svg');
+        if (svgEl) svgEl.style.pointerEvents = 'auto';
+        document.querySelectorAll('.map-country').forEach(p => p.style.pointerEvents = 'auto');
+      }
+    }
+    lastComputedAnim = computedAnim;
   }
 
-  // Panels stay open — user controls minimize manually via the button
-
-  // Smoothly remove bottom news line
   const bottomPanel = document.getElementById('earth-footer');
   if (bottomPanel) {
-     bottomPanel.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
-     if (computedAnim > 0.05) {
-         bottomPanel.style.transform = 'translateY(100px)';
-         bottomPanel.style.opacity = '0';
-         bottomPanel.style.pointerEvents = 'none';
-     } else {
-         bottomPanel.style.transform = 'translateY(0px)';
-         bottomPanel.style.opacity = '1';
-         bottomPanel.style.pointerEvents = 'auto'; // allow clicking if there were links
-     }
+    bottomPanel.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+    if (computedAnim > 0.05) {
+      bottomPanel.style.transform = 'translateY(100px)';
+      bottomPanel.style.opacity = '0';
+      bottomPanel.style.pointerEvents = 'none';
+    } else {
+      bottomPanel.style.transform = 'translateY(0px)';
+      bottomPanel.style.opacity = '1';
+      bottomPanel.style.pointerEvents = 'auto';
+    }
   }
 
-  requestAnimationFrame(animateUnroll);
+  if (Math.abs(targetProgress - currentProgress) > 0.0005 || computedAnim !== lastComputedAnim) {
+    requestAnimationFrame(animateUnroll);
+  }
 }
-requestAnimationFrame(animateUnroll);
 
-// Handle window resize for globe
+// Initial kick + re-trigger on scroll
+requestAnimationFrame(animateUnroll);
+lenis.on('scroll', () => requestAnimationFrame(animateUnroll));
+
 window.addEventListener('resize', () => {
   world.width(window.innerWidth);
   world.height(window.innerHeight);
 });
 
-
 // 4. Initial GSAP Animations
 const tl = gsap.timeline();
 
-// Fade in header
 tl.from('.top-nav', { y: -50, opacity: 0, duration: 0.8, ease: "power3.out" })
-  // Slide in left panel
-  .from('.slide-in-left', { x: -50, opacity: 0, duration: 0.6, ease: "power2.out"}, "-=0.4")
-  // Slide in right panel
-  .fromTo('.slide-in-right', 
-    { x: 50, opacity: 0 }, 
+  .from('.slide-in-left', { x: -50, opacity: 0, duration: 0.6, ease: "power2.out" }, "-=0.4")
+  .fromTo('.slide-in-right',
+    { x: 50, opacity: 0 },
     { x: 0, opacity: 1, duration: 0.6, ease: "power2.out" },
-  "-=0.4")
-  // Slide up bottom panel
-  .from('.bottom-panel', { y: 50, opacity: 0, duration: 0.6, ease: "power2.out"}, "-=0.4")
+    "-=0.4")
+  .from('.bottom-panel', { y: 50, opacity: 0, duration: 0.6, ease: "power2.out" }, "-=0.4")
   .from('.gti-box', { opacity: 0, y: -10, duration: 0.4 }, '-=0.2')
   .from('#gti-sparkline', { opacity: 0, duration: 0.5 }, '-=0.2')
   .from('.region-grid', { opacity: 0, y: 10, duration: 0.4 }, '-=0.3')
   .from('.scenario-block', { opacity: 0, y: 10, duration: 0.3, stagger: 0.1 }, '-=0.2')
   .from('.signal-bars', { opacity: 0, duration: 0.4 }, '-=0.2');
 
-
 // Manual Minimization logic for Left Panel
 const leftMinBtn = document.getElementById('minimize-left-btn');
 const leftFilterPanel = document.getElementById('left-filter-panel');
-let userManuallyClosed = false; // Guard: prevents RAF loop from overriding manual clicks
+let userManuallyClosed = false;
 let hasPageScrolled = false;
 
 window.addEventListener('scroll', () => {
@@ -1425,7 +1417,7 @@ if (leftFilterPanel && leftMinBtn) {
   openPanel(leftFilterPanel, leftMinBtn);
   leftMinBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    userManuallyClosed = !leftFilterPanel.classList.contains('minimized'); // will be closed after toggle
+    userManuallyClosed = !leftFilterPanel.classList.contains('minimized');
     togglePanel(leftFilterPanel, leftMinBtn);
   });
 }
@@ -1444,24 +1436,20 @@ if (rightSignalPanel && rightMinBtn) {
 }
 
 // Tabs logic for Signal Card
-const subTabs = document.querySelectorAll('.sub-tab');
+const subTabs = document.querySelectorAll('.sub-tab:not([data-action])');
 subTabs.forEach(tab => {
   tab.addEventListener('click', (e) => {
-    // remove active from all subtabs
     subTabs.forEach(t => t.classList.remove('active'));
-    // hide all sub panels
     document.querySelectorAll('.sub-panel').forEach(p => {
-       p.classList.remove('active');
-       p.classList.add('hidden');
+      p.classList.remove('active');
+      p.classList.add('hidden');
     });
-
-    // add active to clicked tab
     const target = e.target;
     target.classList.add('active');
-
-    // show target panel
     const panelId = target.getAttribute('data-panel');
+    if (!panelId) return;
     const panel = document.getElementById('panel-' + panelId);
+    if (!panel) return;
     panel.classList.remove('hidden');
     panel.classList.add('active');
   });
@@ -1598,7 +1586,7 @@ function renderFusionSidebar(symbol) {
 const stockItems = document.querySelectorAll('.stock-item');
 stockItems.forEach(item => {
   item.addEventListener('mouseenter', () => {
-    if(!item.classList.contains('active')) {
+    if (!item.classList.contains('active')) {
       anime({
         targets: item,
         translateX: 5,
@@ -1609,7 +1597,7 @@ stockItems.forEach(item => {
     }
   });
   item.addEventListener('mouseleave', () => {
-    if(!item.classList.contains('active')) {
+    if (!item.classList.contains('active')) {
       anime({
         targets: item,
         translateX: 0,
@@ -1620,22 +1608,19 @@ stockItems.forEach(item => {
     }
   });
 
-  // Click to change dummy text
   item.addEventListener('click', () => {
     stockItems.forEach(si => {
       si.classList.remove('active');
       anime({ targets: si, translateX: 0, backgroundColor: 'rgba(0,0,0,0.2)', duration: 200 });
     });
     item.classList.add('active');
-    
-    // Change main card title & update fusion score sidebar
+
     const symbol = item.getAttribute('data-stock');
     const currentStockEl = document.getElementById('current-stock');
     if (currentStockEl) currentStockEl.innerText = symbol;
     renderFusionSidebar(symbol);
-    
-    // Simple UI change animation on selection
-    gsap.from('.main-signal-card', { opacity: 0.5, scale: 0.98, duration: 0.3, ease: "power1.out"});
+
+    gsap.from('.main-signal-card', { opacity: 0.5, scale: 0.98, duration: 0.3, ease: "power1.out" });
   });
 });
 
@@ -1647,25 +1632,23 @@ gsap.to('.ticker-content', {
   repeat: -1
 });
 
-// showGeoView defined earlier in file (line ~208), no duplicate needed
-
 // Top Nav Tabs interaction
 const mainTabs = document.querySelectorAll('.top-nav .tab');
 mainTabs.forEach(tab => {
   tab.addEventListener('click', () => {
     mainTabs.forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    
-    // Animate a brief flash or feedback
-    gsap.fromTo(tab, 
+
+    gsap.fromTo(tab,
       { backgroundColor: 'rgba(255,255,255,0.2)' },
       { backgroundColor: 'rgba(34, 197, 94, 0.1)', duration: 0.52, ease: 'power2.out' }
     );
-    
-    // SPA scrolling logic
+
     const target = tab.getAttribute('data-target');
     if (target === 'earth') lenis.scrollTo('#earth-view', { duration: 1.75 });
     if (target === 'geo') lenis.scrollTo('#geo-view', { duration: 1.75 });
+    if (target === 'signals') lenis.scrollTo('#trade-view', { duration: 1.75 });
+    if (target === 'portfolio') lenis.scrollTo('#portfolio-view', { duration: 1.75 });
   });
 });
 
@@ -1721,7 +1704,9 @@ function loadAssetChart(asset) {
   const indEl = document.getElementById('active-asset-indicator');
   if (titleEl) titleEl.innerHTML = `${asset} <span style="opacity:0.4;font-size:10px;">${data.pair}</span>`;
   if (indEl) {
-    indEl.textContent = data.pct;
+    const pctSpan = document.getElementById('active-asset-pct');
+    if (pctSpan) pctSpan.textContent = data.pct;
+    else indEl.textContent = data.pct;
     indEl.className = 'c-indicator ' + data.color;
   }
 }
@@ -1751,7 +1736,6 @@ if (sparkCanvas) {
   sCtx.lineWidth = 1.5;
   sCtx.stroke();
 
-  // Fill under line
   sCtx.lineTo(w, h); sCtx.lineTo(0, h); sCtx.closePath();
   sCtx.fillStyle = 'rgba(245,158,11,0.12)';
   sCtx.fill();
@@ -1771,16 +1755,13 @@ function updateScenario(type, val) {
   if (type === 'geo') {
     document.getElementById('geo-val').textContent = v + '%';
     document.getElementById('geo-bar').style.width = v + '%';
-    // Update GTI
     const gti = (60 + v * 0.4).toFixed(1);
     document.getElementById('gti-value').textContent = gti;
     document.getElementById('gti-delta').textContent = '+' + (v * 0.08).toFixed(1) + ' today';
-    // Update severity label
     const sevEl = document.getElementById('gti-severity');
     if (v > 85) { sevEl.textContent = 'CRITICAL'; sevEl.style.color = '#ef4444'; sevEl.style.borderColor = 'rgba(239,68,68,0.3)'; sevEl.style.background = 'rgba(239,68,68,0.1)'; }
     else if (v > 50) { sevEl.textContent = 'ELEVATED'; sevEl.style.color = '#f59e0b'; sevEl.style.borderColor = 'rgba(245,158,11,0.25)'; sevEl.style.background = 'rgba(245,158,11,0.12)'; }
     else { sevEl.textContent = 'MODERATE'; sevEl.style.color = '#3b82f6'; sevEl.style.borderColor = 'rgba(59,130,246,0.25)'; sevEl.style.background = 'rgba(59,130,246,0.1)'; }
-    // Update regime in nav
     if (v > 85) updateRegime('CRISIS MODE', 'red');
   }
   if (type === 'rate') {
@@ -1794,7 +1775,6 @@ function updateRegime(label, color) {
   const regimeEl = document.querySelector('.stat .value.amber, .stat .value.red, .stat .value.green');
   if (regimeEl) {
     regimeEl.textContent = label;
-    // Keep standard classes + dynamic color class
     regimeEl.className = 'value ' + color;
   }
 }
@@ -1803,8 +1783,6 @@ if (oilSlider) oilSlider.addEventListener('input', e => updateScenario('oil', e.
 if (geoSlider) geoSlider.addEventListener('input', e => updateScenario('geo', e.target.value));
 if (rateSlider) rateSlider.addEventListener('input', e => updateScenario('rate', e.target.value));
 
-let activeRegion = 'all';
-
 document.querySelectorAll('.region-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     setSelectedRegion(btn.dataset.region);
@@ -1812,41 +1790,65 @@ document.querySelectorAll('.region-btn').forEach(btn => {
 });
 updateRegionButtons();
 
-function finalizeAppInitialization() {
-  renderLandingRightPanel();
-  renderFusionSidebar('HDFCBANK');
-  ensureGeoRightPanel();
+// ─── FINALIZE APP INITIALIZATION ─────────────────────────────────────────────
+async function finalizeAppInitialization() {
 
-  const landingRightPanelEl = document.getElementById('right-signal-panel');
-  if (landingRightPanelEl && landingRightPanelEl.dataset.landingClickBound !== '1') {
-    landingRightPanelEl.dataset.landingClickBound = '1';
-    landingRightPanelEl.addEventListener('click', handleLandingRightPanelClick);
+
+  // Load data from Supabase — fall back to hardcoded data if unavailable
+  const [sectorStocksDB, geoEventsDB] = await Promise.all([
+    loadSectorStocks(),
+    loadGeoEvents()
+  ]);
+
+  // Only merge remote data when it actually returned rows
+  if (sectorStocksDB && Object.keys(sectorStocksDB).length > 0) {
+    Object.assign(sectorStocks, sectorStocksDB);
+  }
+  if (geoEventsDB && geoEventsDB.length > 0) {
+    geoEvents.length = 0;
+    geoEventsDB.forEach(e => geoEvents.push(e));
+    world.pointsData(geoEvents);
   }
 
-  document.querySelectorAll('.asset-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      document.querySelectorAll('.asset-card').forEach((c) => c.classList.remove('active'));
-      card.classList.add('active');
-      const asset = card.dataset.asset;
-      loadAssetChart(asset);
-      gsap.from('.chart-header', { opacity: 0.5, y: 8, duration: 0.25 });
+  // Connect Finnhub for real-time prices (no-ops if key is missing)
+  connectFinnhub();
+
+  // Watch all Banking stocks by default
+  const bankingTickers = ['HDFCBANK', 'SBIN', 'ICICIBANK', 'AXISBANK', 'KOTAKBANK'];
+  bankingTickers.forEach(ticker => {
+    watchStock(ticker, ({ symbol, price }) => {
+      document.querySelectorAll(`[data-stock="${symbol}"] .price`)
+        .forEach(el => el.textContent = `₹${price.toFixed(2)}`);
     });
   });
 
-  setTimeout(() => {
-    document.querySelectorAll('.asset-card').forEach((c) => c.classList.remove('active'));
-    document.querySelector('.asset-card[data-asset="OIL"]')?.classList.add('active');
-    loadAssetChart('OIL');
-  }, 300);
+  // Wire asset card clicks (geo right panel commodity tabs)
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.asset-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.asset-card').forEach((c) => c.classList.remove('active'));
+        card.classList.add('active');
+        const asset = card.dataset.asset;
+        loadAssetChart(asset);
+        gsap.from('.chart-header', { opacity: 0.5, y: 8, duration: 0.25 });
+      });
+    });
+  });
 
-  import('./tradeView.js').then(({ initTradeView }) => initTradeView());
-  import('./portfolioView.js').then(({ initPortfolioView }) => initPortfolioView());
+  renderLandingRightPanel();
+
+  // Wire landing right panel click delegation (was missing — caused all clicks to be ignored)
+  if (rightSignalPanel && !rightSignalPanel.dataset.landingClickBound) {
+    rightSignalPanel.dataset.landingClickBound = '1';
+    rightSignalPanel.addEventListener('click', handleLandingRightPanelClick);
+  }
+
+  renderFusionSidebar('HDFCBANK');
+  ensureGeoRightPanel();
+
+  // Initialize Trade Desk and Portfolio views (charts, watchlist, positions)
+  await initTradeView();
+  initPortfolioView();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', finalizeAppInitialization);
-} else {
-  finalizeAppInitialization();
-}
-
-
+finalizeAppInitialization();

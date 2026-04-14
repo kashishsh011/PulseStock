@@ -2,7 +2,7 @@ import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 import { lenis } from './main.js';
 import { mountLightweightCandlestickFromCanvas } from './lightweightCandleMount.js';
-
+import { supabase } from './supabase.js';
 const POSITIONS = [
   {
     ticker: 'HDFCBANK',
@@ -56,8 +56,9 @@ const POSITIONS = [
   },
 ];
 
-POSITIONS.forEach((p) => {
-  p.daysHeld = 3 + Math.floor(Math.random() * 19);
+POSITIONS.forEach((p, i) => {
+  const seeds = [12, 7, 3, 18, 5];
+  p.daysHeld = seeds[i] ?? 7;
 });
 
 let selectedTicker = POSITIONS[0].ticker;
@@ -299,8 +300,8 @@ function selectPosition(ticker, flash = true) {
 
   resizePortfolioCanvases();
   const candles = generateCandles(stock.ltp, 60);
-  mountLightweightCandlestickFromCanvas('portfolio-candle-chart', candles, 'lw-chart-div-portfolio');
-  updatePortfolioOHLC(candles);
+  const renderedCandles = mountLightweightCandlestickFromCanvas('portfolio-candle-chart', candles, 'lw-chart-div-portfolio') || candles;
+  updatePortfolioOHLC(renderedCandles);
 
   const cost = stock.qty * stock.entry;
   const val = stock.qty * stock.ltp;
@@ -423,7 +424,7 @@ function setupPortfolioWaitlistBanner() {
     });
   }
 
-  submitBtn.addEventListener('click', () => {
+  submitBtn.addEventListener('click', async () => {
     if (finished || waitlistSubmitted) return;
     const email = input.value;
     if (!isValidPortfolioWaitlistEmail(email)) {
@@ -432,6 +433,17 @@ function setupPortfolioWaitlistBanner() {
       return;
     }
     waitlistSubmitted = true;
+
+    // Save to Supabase
+    const { error } = await supabase
+      .from('waitlist')
+      .insert({ email: email.trim(), source: 'portfolio' });
+
+    if (error && error.code !== '23505') {
+      console.error('Waitlist error:', error.message);
+    }
+
+    // Keep localStorage so banner stays dismissed on refresh
     localStorage.setItem(PORT_WAITLIST_STORAGE_KEY, '1');
     formPane.setAttribute('hidden', '');
     successPane.removeAttribute('hidden');
@@ -512,6 +524,9 @@ export function initPortfolioView() {
   const root = document.getElementById('portfolio-view');
   if (!root) return;
 
+  // Must register here in case initPortfolioView runs before initTradeView
+  gsap.registerPlugin(ScrollTrigger);
+
   resizePortfolioCanvases();
   updateSummaryBar();
   renderPositionsList();
@@ -553,8 +568,8 @@ export function initPortfolioView() {
       resizePortfolioCanvases();
       const st = getPosition(selectedTicker);
       const candles = generateCandles(st.ltp, 60);
-      mountLightweightCandlestickFromCanvas('portfolio-candle-chart', candles, 'lw-chart-div-portfolio');
-      updatePortfolioOHLC(candles);
+      const renderedCandles = mountLightweightCandlestickFromCanvas('portfolio-candle-chart', candles, 'lw-chart-div-portfolio') || candles;
+      updatePortfolioOHLC(renderedCandles);
       drawDrawdownChart();
       ScrollTrigger.refresh();
     }, 120);

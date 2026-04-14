@@ -2,6 +2,7 @@ import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
 import { lenis } from './main.js';
 import { mountLightweightCandlestickFromCanvas } from './lightweightCandleMount.js';
+import { loadWatchlist } from './dataLoader.js';
 
 /** Geo → Trade handoff context (mutable for future map integration). */
 export const tradeContext = {
@@ -29,48 +30,17 @@ const COUNTRY_FLAGS = {
 };
 
 /** Same Banking rows as main.js `sectorStocks.Banking` (hardcoded copy — do not import main). */
-const BANKING_WATCHLIST = [
-  {
-    name: 'HDFC Bank',
-    ticker: 'HDFCBANK',
-    score: 0.16,
-    label: 'CONFLICTED',
-    breakdown: { F: 0.43, T: -0.14, N: 0.5, G: -0.3 },
-    mockPrice: 1655,
-  },
-  {
-    name: 'SBI',
-    ticker: 'SBIN',
-    score: 0.42,
-    label: 'BULLISH',
-    breakdown: { F: 0.3, T: 0.25, N: 0.2, G: -0.1 },
-    mockPrice: 776,
-  },
-  {
-    name: 'ICICI Bank',
-    ticker: 'ICICIBANK',
-    score: -0.21,
-    label: 'BEARISH',
-    breakdown: { F: -0.1, T: -0.3, N: -0.2, G: -0.3 },
-    mockPrice: 1096,
-  },
-  {
-    name: 'Axis Bank',
-    ticker: 'AXISBANK',
-    score: 0.05,
-    label: 'NEUTRAL',
-    breakdown: { F: 0.1, T: 0.05, N: 0, G: -0.1 },
-    mockPrice: 1063,
-  },
-  {
-    name: 'Kotak Bank',
-    ticker: 'KOTAKBANK',
-    score: 0.31,
-    label: 'LEANING BULLISH',
-    breakdown: { F: 0.4, T: 0.2, N: 0.3, G: -0.2 },
-    mockPrice: 1815,
-  },
+// Fallback used until Supabase loads
+const BANKING_WATCHLIST_FALLBACK = [
+  { name: 'HDFC Bank', ticker: 'HDFCBANK', score: 0.16, label: 'CONFLICTED', breakdown: { F: 0.43, T: -0.14, N: 0.5, G: -0.3 }, mockPrice: 1655 },
+  { name: 'SBI', ticker: 'SBIN', score: 0.42, label: 'BULLISH', breakdown: { F: 0.3, T: 0.25, N: 0.2, G: -0.1 }, mockPrice: 776 },
+  { name: 'ICICI Bank', ticker: 'ICICIBANK', score: -0.21, label: 'BEARISH', breakdown: { F: -0.1, T: -0.3, N: -0.2, G: -0.3 }, mockPrice: 1096 },
+  { name: 'Axis Bank', ticker: 'AXISBANK', score: 0.05, label: 'NEUTRAL', breakdown: { F: 0.1, T: 0.05, N: 0, G: -0.1 }, mockPrice: 1063 },
+  { name: 'Kotak Bank', ticker: 'KOTAKBANK', score: 0.31, label: 'LEANING BULLISH', breakdown: { F: 0.4, T: 0.2, N: 0.3, G: -0.2 }, mockPrice: 1815 },
 ];
+
+// This will be populated from Supabase on init
+let BANKING_WATCHLIST = [...BANKING_WATCHLIST_FALLBACK];
 
 function getBadgeClass(label) {
   const u = (label || '').toUpperCase();
@@ -568,7 +538,8 @@ function clearTradeScrollAnimProps() {
   clearSel('#trade-watchlist');
   clearSel('#trade-col-center');
   clearSel('#trade-col-right');
-  clearSel('#lw-chart-div-trade');
+  // NOTE: do NOT clear #lw-chart-div-trade here — its own ScrollTrigger manages
+  // the reveal and clearing opacity/scaleY prematurely would hide the chart again.
   clearSel('#trade-watchlist .trade-wl-row');
   clearSel('#trade-fusion-bars .trade-fusion-bar-row');
   clearSel('#trade-col-right .ai-explainer');
@@ -652,7 +623,20 @@ function setupTradeScrollEntrances() {
     duration: 0.62,
     ease: 'power2.out',
     delay: 0.38,
-    scrollTrigger: { ...st, start: 'top 80%' },
+    scrollTrigger: {
+      ...st,
+      start: 'top 80%',
+      // If already in-view on page load / direct nav, reveal immediately
+      onRefresh(self) {
+        if (self.progress === 1) {
+          gsap.set('#lw-chart-div-trade', { opacity: 1, scaleY: 1, clearProps: 'transform' });
+        }
+      },
+    },
+    onComplete() {
+      // Ensure inline scaleY doesn't linger and conflict with ResizeObserver redraws
+      gsap.set('#lw-chart-div-trade', { clearProps: 'scaleY,transformOrigin' });
+    },
   });
 
   gsap.to(fusionRows, {
@@ -676,16 +660,12 @@ function setupTradeScrollEntrances() {
   });
 }
 
-export function initTradeView() {
+export async function initTradeView() {
   gsap.registerPlugin(ScrollTrigger);
 
   if (typeof window !== 'undefined' && !window.__lenisBridged) {
     window.__lenisBridged = true;
     lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add((time) => {
-      lenis.raf(time * 1000);
-    });
-    gsap.ticker.lagSmoothing(0);
   }
 
   const root = document.getElementById('trade-view');
@@ -694,6 +674,23 @@ export function initTradeView() {
   state.lenis = lenis;
 
   updateContextRibbon();
+
+  // Load watchlist from Supabase, fall back to hardcoded if empty
+  try {
+    const remoteWatchlist = await loadWatchlist(null); // null = no user auth yet
+    if (remoteWatchlist.length > 0) {
+      BANKING_WATCHLIST = remoteWatchlist.map(row => ({
+        name: row.stocks?.name ?? row.ticker,
+        ticker: row.ticker,
+        score: row.fusion_scores?.score ?? 0,
+        label: row.fusion_scores?.label ?? 'NEUTRAL',
+        breakdown: row.fusion_scores?.breakdown ?? { F: 0, T: 0, N: 0, G: 0 },
+        mockPrice: row.stocks?.mock_price ?? 1000,
+      }));
+    }
+  } catch (err) {
+    console.warn('Watchlist load failed, using fallback:', err.message);
+  }
 
   const initialTicker =
     BANKING_WATCHLIST.find((s) => s.ticker === tradeContext.stock?.ticker)?.ticker || BANKING_WATCHLIST[0].ticker;
